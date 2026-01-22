@@ -1,0 +1,100 @@
+id: eead093d-66f0-436f-aaca-512c09b9561a
+name: Dev Workflow
+description: A simple example workflow with Claude and Codex agents
+workingDirectory: .
+nodes:
+  - id: input-1
+    type: input
+    position:
+      x: 100
+      'y': 200
+    data:
+      type: input
+      name: User Input
+      description: Enter your task description
+  - id: claude-1
+    type: claude-agent
+    position:
+      x: 400
+      'y': 100
+    data:
+      type: claude-agent
+      name: Code Analyzer
+      userQuery: >-
+        For the below feature, analyze the codebase and create an implementation plan that a coding agent can take and
+        implement precise
+      model: opus
+      tools:
+        - Read
+        - Glob
+        - Grep
+        - Bash
+      systemPrompt: You are a code analysis expert.
+      conversationMode: persist
+      outputConfig:
+        format: json
+        schema: |-
+          {
+            "type": "object",
+            "properties": {
+              "plan": {
+                "type": "string"
+              }
+            }
+          }
+  - id: codex-1
+    type: codex-agent
+    position:
+      x: 400
+      'y': 300
+    data:
+      type: codex-agent
+      name: Code Generator
+      userQuery: Implement the requested changes based on the input.
+      model: gpt-5.2-codex
+      approvalPolicy: never
+      sandbox: workspace-write
+  - id: output-1
+    type: output
+    position:
+      x: 700
+      'y': 200
+    data:
+      type: output
+      name: Final Result
+  - id: 110a0a43-cf0c-44b4-a9c1-e580e86fc931
+    type: approval
+    position:
+      x: 615
+      'y': -15
+    data:
+      type: approval
+      name: Review
+      feedbackPrompt: What should be changed?
+      timeoutAction: reject
+      inputSelections:
+        - nodeId: claude-1
+          nodeName: Code Analyzer
+          fields:
+            - plan
+      promptMessage: 'Review the below plan:'
+edges:
+  - id: e1
+    source: input-1
+    target: claude-1
+  - id: e4
+    source: codex-1
+    target: output-1
+  - id: c75c9d4e-bd6d-4e94-a941-1ac8341208f6
+    source: claude-1
+    target: 110a0a43-cf0c-44b4-a9c1-e580e86fc931
+  - id: c0ba9fc3-5212-475c-9454-c535c522c680
+    source: 110a0a43-cf0c-44b4-a9c1-e580e86fc931
+    target: codex-1
+    sourceHandle: approved
+  - id: 802e173c-b783-4883-a65b-484077105c22
+    source: 110a0a43-cf0c-44b4-a9c1-e580e86fc931
+    target: claude-1
+    sourceHandle: rejected
+createdAt: '2026-01-22T07:18:08.167Z'
+updatedAt: '2026-01-22T07:24:21.542Z'
