@@ -1,0 +1,16 @@
+services:
+  circuit:
+    build: .
+    ports:
+      - "3001:3001"
+    volumes:
+      - circuit-data:/app/data
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    restart: unless-stopped
+
+volumes:
+  circuit-data:

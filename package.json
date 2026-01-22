@@ -1,0 +1,36 @@
+{
+  "name": "circuit",
+  "version": "0.1.0",
+  "description": "Drag-and-drop DAG editor for orchestrating Claude Code and OpenAI Codex agents",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=backend",
+    "build": "npm run build --workspace=frontend",
+    "start": "NODE_ENV=production npm run start --workspace=backend",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/circuit"
+  },
+  "license": "MIT",
+  "keywords": [
+    "claude",
+    "codex",
+    "agent",
+    "orchestrator",
+    "dag",
+    "workflow",
+    "circuit"
+  ]
+}

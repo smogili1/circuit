@@ -1,0 +1,39 @@
+# Dependencies
+node_modules
+
+# Build outputs
+dist
+build
+
+# Logs
+.logs
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage
+
+# User data (use volume instead)
+data
+
+# Git
+.git
+.gitignore
+
+# Docs
+*.md
+!README.md
