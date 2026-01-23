@@ -35,7 +35,7 @@ Login via Oauth in the Claude Code/Codex CLI on the machine where workflows will
 
 ```bash
 # Clone the repository
-git clone https://github.com/smogili2/circuit.git
+git clone https://github.com/smogili1/circuit.git
 cd circuit
 
 # Install dependencies
