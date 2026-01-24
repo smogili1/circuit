@@ -12,7 +12,7 @@ import { ValidationErrorModal } from './components/Execution/ValidationErrorModa
 import { WorkflowList } from './components/common/WorkflowList';
 import { MCPServersPage } from './pages/MCPServersPage';
 import { NavigationContext, AppPage } from './contexts/NavigationContext';
-import { Save, Wifi, WifiOff, PanelLeftClose, PanelRightClose, Check, Loader2, AlertCircle, Pencil, Play, FolderOpen, Blocks, Server } from 'lucide-react';
+import { Save, Wifi, WifiOff, PanelLeftClose, PanelRightClose, Check, Loader2, AlertCircle, Pencil, Play, FolderOpen, Blocks, Server, X } from 'lucide-react';
 
 type AppMode = 'design' | 'execution' | 'mcp';
 
@@ -33,7 +33,7 @@ export default function App() {
     loadExecutionHistory,
   } = useSocket();
 
-  const { workflow, setWorkflow, getWorkflowData, selectNode, getDuplicateNames } = useWorkflowStore();
+  const { workflow, setWorkflow, getWorkflowData, selectNode, getDuplicateNames, updateWorkflowSettings } = useWorkflowStore();
   const { fetchSchemas, loading: schemasLoading, error: schemasError, initialized: schemasInitialized } = useSchemaStore();
 
   // Fetch schemas on mount
@@ -45,7 +45,9 @@ export default function App() {
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [activeLeftTab, setActiveLeftTab] = useState<'workflows' | 'nodes'>('workflows');
-    const [duplicateNameError, setDuplicateNameError] = useState<string[] | null>(null);
+  const [duplicateNameError, setDuplicateNameError] = useState<string[] | null>(null);
+  const [isEditingWorkingDir, setIsEditingWorkingDir] = useState(false);
+  const [workingDirInput, setWorkingDirInput] = useState('');
 
   // Wrapper to validate before starting execution
   const handleStartExecution = useCallback((workflowId: string, input: string) => {
@@ -197,6 +199,68 @@ export default function App() {
             <span className="text-sm text-gray-500 dark:text-gray-400">
               / {workflow.name}
             </span>
+          )}
+
+          {/* Working Directory */}
+          {workflow && (
+            <div className="flex items-center gap-2 ml-2 pl-4 border-l border-gray-300 dark:border-gray-600">
+              <FolderOpen size={14} className="text-gray-400 flex-shrink-0" />
+              {isEditingWorkingDir ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="text"
+                    value={workingDirInput}
+                    onChange={(e) => setWorkingDirInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        updateWorkflowSettings({ workingDirectory: workingDirInput });
+                        setIsEditingWorkingDir(false);
+                      } else if (e.key === 'Escape') {
+                        setIsEditingWorkingDir(false);
+                        setWorkingDirInput(workflow.workingDirectory || '');
+                      }
+                    }}
+                    autoFocus
+                    placeholder="/path/to/project"
+                    className="w-64 px-2 py-1 text-sm border rounded dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    onClick={() => {
+                      updateWorkflowSettings({ workingDirectory: workingDirInput });
+                      setIsEditingWorkingDir(false);
+                    }}
+                    className="p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
+                    title="Save"
+                  >
+                    <Check size={14} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsEditingWorkingDir(false);
+                      setWorkingDirInput(workflow.workingDirectory || '');
+                    }}
+                    className="p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
+                    title="Cancel"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    setWorkingDirInput(workflow.workingDirectory || '');
+                    setIsEditingWorkingDir(true);
+                  }}
+                  className="flex items-center gap-1.5 px-2 py-1 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors group"
+                  title="Click to edit working directory"
+                >
+                  <span className={workflow.workingDirectory ? '' : 'italic text-gray-400'}>
+                    {workflow.workingDirectory || 'Set working directory...'}
+                  </span>
+                  <Pencil size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              )}
+            </div>
           )}
 
           {/* Mode Tabs */}

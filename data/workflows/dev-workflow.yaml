@@ -1,7 +1,7 @@
 id: eead093d-66f0-436f-aaca-512c09b9561a
 name: Dev Workflow
 description: A simple example workflow with Claude and Codex agents
-workingDirectory: .
+workingDirectory: /path/to/project
 nodes:
   - id: input-1
     type: input
@@ -97,4 +97,4 @@ edges:
     target: claude-1
     sourceHandle: rejected
 createdAt: '2026-01-22T07:18:08.167Z'
-updatedAt: '2026-01-22T07:24:21.542Z'
+updatedAt: '2026-01-24T21:57:28.859Z'
