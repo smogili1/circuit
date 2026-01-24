@@ -6,7 +6,7 @@
  * as a stdio-to-remote bridge.
  */
 
-import {
+import type {
   MCPServer,
   MCPStdioTransport,
   MCPSSETransport,
@@ -18,7 +18,7 @@ import {
 } from './types.js';
 
 // Re-export SDK types for consumers
-export { SDKMCPServerConfig, SDKMCPServersConfig };
+export type { SDKMCPServerConfig, SDKMCPServersConfig };
 
 // mcp-remote version to use (pin to avoid security issues)
 const MCP_REMOTE_VERSION = '0.1.16';

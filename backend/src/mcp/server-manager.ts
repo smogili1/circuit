@@ -10,7 +10,7 @@ import yaml from 'js-yaml';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { spawn, ChildProcess } from 'child_process';
-import {
+import type {
   MCPServer,
   MCPServersFile,
   CreateMCPServerInput,

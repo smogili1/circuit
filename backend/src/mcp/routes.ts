@@ -4,7 +4,7 @@
 
 import { Router, Request, Response } from 'express';
 import { getMCPServerManager } from './server-manager.js';
-import { CreateMCPServerInput, UpdateMCPServerInput } from './types.js';
+import type { CreateMCPServerInput, UpdateMCPServerInput } from './types.js';
 
 const router = Router();
 
