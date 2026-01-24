@@ -18,7 +18,7 @@ import {
   setVariable,
   getVariable,
 } from './context.js';
-import { interpolateReferences, buildNodeNameMap } from './references.js';
+import { interpolateReferences, buildNodeNameMap, parseReference, resolveReference } from './references.js';
 import { executorRegistry, ExecutorContext, ExecutorEmitter } from './executors/index.js';
 import { ExecutionError, ErrorCodes } from './errors.js';
 
@@ -399,6 +399,19 @@ export class DAGExecutionEngine extends EventEmitter {
       interpolate(text: string): string {
         return interpolateReferences(
           text,
+          self.context.nodeOutputs,
+          self.nodeNameToId,
+          self.context.variables
+        );
+      },
+
+      resolveReference(reference: string): unknown {
+        const parsed = parseReference(reference);
+        if (!parsed) {
+          return undefined;
+        }
+        return resolveReference(
+          parsed,
           self.context.nodeOutputs,
           self.nodeNameToId,
           self.context.variables

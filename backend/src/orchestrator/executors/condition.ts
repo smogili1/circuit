@@ -222,7 +222,12 @@ export const conditionExecutor: NodeExecutor = {
 
     try {
       const details: ConditionEvaluationDetail[] = conditions.map((condition, index) => {
-        const inputValue = context.interpolate(condition.inputReference);
+        // Use resolveReference for direct references to preserve actual values (null, objects, etc.)
+        // Fall back to interpolate for complex strings with embedded references
+        const isDirectReference = /^\{\{[^}]+\}\}$/.test(condition.inputReference.trim());
+        const inputValue = isDirectReference
+          ? context.resolveReference(condition.inputReference.trim())
+          : context.interpolate(condition.inputReference);
         const compareValue = condition.compareValue
           ? context.interpolate(condition.compareValue)
           : undefined;

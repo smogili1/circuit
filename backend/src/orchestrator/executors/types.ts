@@ -75,6 +75,9 @@ export interface ExecutorContext {
   /** Interpolate references in a string */
   interpolate(text: string): string;
 
+  /** Resolve a single reference to its actual value (preserves type) */
+  resolveReference(reference: string): unknown;
+
   /** Set a variable in the context */
   setVariable(name: string, value: unknown): void;
 
