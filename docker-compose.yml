@@ -4,7 +4,7 @@ services:
     ports:
       - "3001:3001"
     volumes:
-      - circuit-data:/app/data
+      - ./data:/app/data
     environment:
       - NODE_ENV=production
       - PORT=3001
