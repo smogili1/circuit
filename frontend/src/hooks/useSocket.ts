@@ -213,7 +213,7 @@ export function useSocket() {
       }
 
       return {
-        isRunning: false,
+        isRunning: summary.status === 'running',
         executionId: summary.executionId,
         submittedInput: summary.input ?? null,
         executionStartedAt,
