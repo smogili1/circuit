@@ -11,6 +11,7 @@ import {
   deleteWorkflow,
   duplicateWorkflow,
   initializeStorage,
+  reloadWorkflows,
 } from './workflows/storage.js';
 import {
   initializeExecutionStorage,
@@ -50,13 +51,17 @@ const activeExecutions = new Map<string, DAGExecutionEngine>();
 // REST API Routes
 
 // Get all workflows
-app.get('/api/workflows', (_req, res) => {
+app.get('/api/workflows', async (_req, res) => {
+  // Reload from disk to pick up any external changes to YAML files
+  await reloadWorkflows();
   const workflows = getAllWorkflows();
   res.json(workflows);
 });
 
 // Get a specific workflow
-app.get('/api/workflows/:id', (req, res) => {
+app.get('/api/workflows/:id', async (req, res) => {
+  // Reload from disk to pick up any external changes to YAML files
+  await reloadWorkflows();
   const workflow = getWorkflow(req.params.id);
   if (!workflow) {
     res.status(404).json({ error: 'Workflow not found' });
@@ -201,10 +206,11 @@ app.get('/api/workflows/:id/executions/:executionId/events', async (req, res) =>
 });
 
 // WebSocket Events
-io.on('connection', (socket: Socket) => {
+io.on('connection', async (socket: Socket) => {
   console.log(`Client connected: ${socket.id}`);
 
-  // Send initial workflow list
+  // Reload from disk to pick up any external changes, then send workflow list
+  await reloadWorkflows();
   socket.emit('workflows', getAllWorkflows());
 
   // Handle workflow updates
