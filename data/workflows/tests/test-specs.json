@@ -1,0 +1,319 @@
+{
+  "claude-01-basic": {
+    "name": "Claude Basic Features",
+    "description": "Tests basic Claude execution, reference interpolation, text output, system prompt, model, maxTurns",
+    "nodes": {
+      "Input": {
+        "input": "What is 7 plus 8?",
+        "expectedOutput": {
+          "prompt": "What is 7 plus 8?"
+        }
+      },
+      "MathAgent": {
+        "expectedOutput": {
+          "result": "15",
+          "runCount": 1
+        },
+        "validation": {
+          "result_contains": "15",
+          "runCount_equals": 1,
+          "transcript_not_empty": true
+        }
+      },
+      "Validator": {
+        "expectedOutput": {
+          "passed": true,
+          "checks": {
+            "hasResult": true,
+            "resultContains15": true,
+            "runCountIs1": true,
+            "hasTranscript": true
+          }
+        }
+      }
+    }
+  },
+  "claude-02-json": {
+    "name": "Claude JSON Output",
+    "description": "Tests Claude JSON structured output with schema validation",
+    "nodes": {
+      "Input": {
+        "input": "Generate exactly: name=Apple, color=Red, sweet=true",
+        "expectedOutput": {
+          "prompt": "Generate exactly: name=Apple, color=Red, sweet=true"
+        }
+      },
+      "FruitAgent": {
+        "expectedOutput": {
+          "name": "Apple",
+          "color": "Red",
+          "sweet": true
+        },
+        "validation": {
+          "name_equals": "Apple",
+          "color_equals": "Red",
+          "sweet_equals": true
+        }
+      },
+      "Validator": {
+        "expectedOutput": {
+          "passed": true,
+          "checks": {
+            "nameIsApple": true,
+            "colorIsRed": true,
+            "sweetIsTrue": true
+          }
+        }
+      }
+    }
+  },
+  "claude-03-persist": {
+    "name": "Claude Conversation Persist",
+    "description": "Tests conversation mode persist - agent remembers context across loop iterations",
+    "nodes": {
+      "Input": {
+        "input": "Remember: SECRET=42",
+        "expectedOutput": {
+          "prompt": "Remember: SECRET=42"
+        }
+      },
+      "MemoryAgent": {
+        "run1_expectedOutput": {
+          "acknowledged": true,
+          "runCount": 1
+        },
+        "run2_expectedOutput": {
+          "secret": 42,
+          "runCount": 2
+        },
+        "validation": {
+          "run2_remembers_secret": true,
+          "runCount_increments": true
+        }
+      }
+    }
+  },
+  "claude-04-transcript": {
+    "name": "Claude Transcript Accumulation",
+    "description": "Tests that transcript accumulates across multiple runs in a loop",
+    "nodes": {
+      "Input": {
+        "input": "Say ALPHA",
+        "expectedOutput": {
+          "prompt": "Say ALPHA"
+        }
+      },
+      "SpeakAgent": {
+        "run1_expectedOutput": {
+          "word": "ALPHA",
+          "runCount": 1,
+          "transcript_contains": "ALPHA"
+        },
+        "run2_expectedOutput": {
+          "word": "BETA",
+          "runCount": 2,
+          "transcript_contains": ["ALPHA", "BETA"]
+        },
+        "run3_expectedOutput": {
+          "word": "GAMMA",
+          "runCount": 3,
+          "transcript_contains": ["ALPHA", "BETA", "GAMMA"]
+        }
+      }
+    }
+  },
+  "codex-01-basic": {
+    "name": "Codex Basic Features",
+    "description": "Tests basic Codex execution, reference interpolation, text output, base instructions, model, approvalPolicy, sandbox",
+    "nodes": {
+      "Input": {
+        "input": "What is 12 times 5?",
+        "expectedOutput": {
+          "prompt": "What is 12 times 5?"
+        }
+      },
+      "MathAgent": {
+        "expectedOutput": {
+          "result": "60",
+          "runCount": 1
+        },
+        "validation": {
+          "result_contains": "60",
+          "runCount_equals": 1,
+          "transcript_not_empty": true
+        }
+      },
+      "Validator": {
+        "expectedOutput": {
+          "passed": true,
+          "checks": {
+            "hasResult": true,
+            "resultContains60": true,
+            "runCountIs1": true,
+            "hasTranscript": true
+          }
+        }
+      }
+    }
+  },
+  "codex-02-json": {
+    "name": "Codex JSON Output",
+    "description": "Tests Codex JSON structured output with schema validation",
+    "nodes": {
+      "Input": {
+        "input": "Generate exactly: name=Python, year=1991, compiled=false",
+        "expectedOutput": {
+          "prompt": "Generate exactly: name=Python, year=1991, compiled=false"
+        }
+      },
+      "LangAgent": {
+        "expectedOutput": {
+          "name": "Python",
+          "year": 1991,
+          "compiled": false
+        },
+        "validation": {
+          "name_equals": "Python",
+          "year_equals": 1991,
+          "compiled_equals": false
+        }
+      },
+      "Validator": {
+        "expectedOutput": {
+          "passed": true,
+          "checks": {
+            "nameIsPython": true,
+            "yearIs1991": true,
+            "compiledIsFalse": true
+          }
+        }
+      }
+    }
+  },
+  "codex-03-persist": {
+    "name": "Codex Conversation Persist",
+    "description": "Tests conversation mode persist for Codex - agent remembers context",
+    "nodes": {
+      "Input": {
+        "input": "Remember: CODE=99",
+        "expectedOutput": {
+          "prompt": "Remember: CODE=99"
+        }
+      },
+      "MemoryAgent": {
+        "run1_expectedOutput": {
+          "acknowledged": true,
+          "runCount": 1
+        },
+        "run2_expectedOutput": {
+          "code": 99,
+          "runCount": 2
+        },
+        "validation": {
+          "run2_remembers_code": true,
+          "runCount_increments": true
+        }
+      }
+    }
+  },
+  "codex-04-transcript": {
+    "name": "Codex Transcript Accumulation",
+    "description": "Tests that transcript accumulates across multiple runs for Codex",
+    "nodes": {
+      "Input": {
+        "input": "Say ONE",
+        "expectedOutput": {
+          "prompt": "Say ONE"
+        }
+      },
+      "SpeakAgent": {
+        "run1_expectedOutput": {
+          "word": "ONE",
+          "runCount": 1,
+          "transcript_contains": "ONE"
+        },
+        "run2_expectedOutput": {
+          "word": "TWO",
+          "runCount": 2,
+          "transcript_contains": ["ONE", "TWO"]
+        },
+        "run3_expectedOutput": {
+          "word": "THREE",
+          "runCount": 3,
+          "transcript_contains": ["ONE", "TWO", "THREE"]
+        }
+      }
+    }
+  },
+  "agents-05-chain": {
+    "name": "Cross-Agent Reference Chain",
+    "description": "Tests reference interpolation between Claude and Codex agents",
+    "nodes": {
+      "Input": {
+        "input": "Use number 7",
+        "expectedOutput": {
+          "prompt": "Use number 7"
+        }
+      },
+      "ClaudePicker": {
+        "expectedOutput": {
+          "number": 7
+        }
+      },
+      "CodexDoubler": {
+        "expectedOutput": {
+          "doubled": 14
+        },
+        "validation": {
+          "received_reference": "{{ClaudePicker.number}} resolved to 7",
+          "doubled_correctly": true
+        }
+      },
+      "ClaudeVerifier": {
+        "expectedOutput": {
+          "original": 7,
+          "doubled": 14,
+          "correct": true
+        },
+        "validation": {
+          "received_both_references": true,
+          "verified_math": true
+        }
+      }
+    }
+  },
+  "claude-06-workdir": {
+    "name": "Claude Working Directory",
+    "description": "Tests that Claude agent respects workingDirectory setting",
+    "nodes": {
+      "Input": {
+        "input": "What is your current working directory?",
+        "expectedOutput": {
+          "prompt": "What is your current working directory?"
+        }
+      },
+      "DirAgent": {
+        "expectedOutput": {
+          "directory_contains": "/tmp/test-subdir"
+        }
+      }
+    }
+  },
+  "codex-06-workdir": {
+    "name": "Codex Working Directory",
+    "description": "Tests that Codex agent respects workingDirectory setting",
+    "nodes": {
+      "Input": {
+        "input": "What is your current working directory?",
+        "expectedOutput": {
+          "prompt": "What is your current working directory?"
+        }
+      },
+      "DirAgent": {
+        "expectedOutput": {
+          "directory_contains": "/tmp/test-subdir"
+        }
+      }
+    }
+  }
+}

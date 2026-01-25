@@ -1,0 +1,151 @@
+id: claude-03-persist
+name: "Test: Claude Conversation Persist"
+description: |
+  Tests: conversation mode persist - agent remembers context across loop iterations, runCount increments
+  Run 1 Input: "Remember this secret number: 42"
+  Run 1 Expected: acknowledged=true, runCount=1
+  Run 2 Input: "What was the secret number?"
+  Run 2 Expected: secret=42, runCount=2
+workingDirectory: /tmp/agent-tests
+nodes:
+  - id: input-1
+    type: input
+    position:
+      x: 100
+      y: 300
+    data:
+      type: input
+      name: Input
+      description: "Remember this secret number: 42"
+
+  - id: loop-controller
+    type: javascript
+    position:
+      x: 300
+      y: 300
+    data:
+      type: javascript
+      name: LoopController
+      code: |
+        const runCount = inputs.MemoryAgent?.runCount || 0;
+
+        if (runCount === 0) {
+          // First run: tell agent to remember
+          return {
+            prompt: inputs.Input.prompt,
+            phase: "memorize"
+          };
+        } else {
+          // Second run: ask agent to recall
+          return {
+            prompt: "What was the secret number I told you? Reply with just the number.",
+            phase: "recall"
+          };
+        }
+
+  - id: claude-memory
+    type: claude-agent
+    position:
+      x: 550
+      y: 300
+    data:
+      type: claude-agent
+      name: MemoryAgent
+      userQuery: "{{LoopController.prompt}}"
+      model: haiku
+      systemPrompt: "You have perfect memory. When asked to remember something, acknowledge it. When asked to recall, provide the exact value."
+      tools: []
+      maxTurns: 1
+      conversationMode: persist
+      outputConfig:
+        format: json
+        schema: |-
+          {
+            "type": "object",
+            "properties": {
+              "acknowledged": { "type": "boolean", "description": "True if memorizing" },
+              "secret": { "type": "number", "description": "The recalled secret number" }
+            }
+          }
+
+  - id: condition-done
+    type: condition
+    position:
+      x: 800
+      y: 300
+    data:
+      type: condition
+      name: CheckDone
+      conditions:
+        - id: cond-1
+          inputReference: "{{MemoryAgent.runCount}}"
+          operator: greater_than_or_equals
+          compareValue: "2"
+
+  - id: validator
+    type: javascript
+    position:
+      x: 1050
+      y: 200
+    data:
+      type: javascript
+      name: Validator
+      code: |
+        const agent = inputs.MemoryAgent;
+
+        const checks = {
+          runCountIs2: agent.runCount === 2,
+          secretIs42: agent.secret === 42,
+          hasTranscript: (agent.transcript || '').length > 0
+        };
+
+        const passed = Object.values(checks).every(v => v === true);
+
+        return {
+          passed,
+          checks,
+          actual: {
+            runCount: agent.runCount,
+            secret: agent.secret,
+            transcriptLength: (agent.transcript || '').length
+          },
+          expected: {
+            runCount: 2,
+            secret: 42,
+            hasTranscript: true
+          }
+        };
+
+  - id: output-1
+    type: output
+    position:
+      x: 1300
+      y: 200
+    data:
+      type: output
+      name: Output
+
+edges:
+  - id: edge-1
+    source: input-1
+    target: loop-controller
+  - id: edge-2
+    source: loop-controller
+    target: claude-memory
+  - id: edge-3
+    source: claude-memory
+    target: condition-done
+  - id: edge-4
+    source: condition-done
+    target: validator
+    sourceHandle: 'true'
+  - id: edge-5
+    source: condition-done
+    target: loop-controller
+    sourceHandle: 'false'
+  - id: edge-6
+    source: validator
+    target: output-1
+
+createdAt: '2026-01-12T00:00:00.000Z'
+updatedAt: '2026-01-12T00:00:00.000Z'
