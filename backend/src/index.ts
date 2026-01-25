@@ -461,7 +461,10 @@ async function startServer() {
     const vite = await createViteServer({
       root: frontendRoot,
       configFile: path.join(frontendRoot, 'vite.config.ts'),
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: { server: httpServer },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
