@@ -31,6 +31,8 @@ export default function App() {
     clearValidationErrors,
     fetchExecutionHistory,
     loadExecutionHistory,
+    fetchReplayPreview,
+    replayFromNode,
   } = useSocket();
 
   const { workflow, setWorkflow, getWorkflowData, selectNode, getDuplicateNames, updateWorkflowSettings } = useWorkflowStore();
@@ -469,6 +471,8 @@ export default function App() {
             onReset={resetExecution}
             onRefreshHistory={fetchExecutionHistory}
             onLoadHistory={loadExecutionHistory}
+            onFetchReplayPreview={fetchReplayPreview}
+            onReplayFromNode={replayFromNode}
           />
         )}
         </div>

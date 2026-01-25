@@ -1,9 +1,10 @@
-import { useState, useMemo, memo } from 'react';
-import { Workflow, NodeStatus, NodeType, AgentEvent, ExecutionSummary } from '../../types/workflow';
+import { useState, useMemo, memo, useCallback } from 'react';
+import { Workflow, NodeStatus, NodeType, AgentEvent, ExecutionSummary, ReplayValidationResult } from '../../types/workflow';
 import { ExecutionWorkflowView } from './ExecutionWorkflowView';
 import { LogViewer } from './LogViewer';
 import { ExecutionControls } from './ExecutionControls';
 import { ExecutionHistory } from './ExecutionHistory';
+import { ReplayModal } from './ReplayModal';
 import { BranchPath } from './BranchIndicator';
 
 interface NodeOutput {
@@ -34,6 +35,13 @@ interface FullScreenExecutionProps {
   onReset: () => void;
   onRefreshHistory: (workflowId: string) => void;
   onLoadHistory: (workflowId: string, executionId: string) => void;
+  onFetchReplayPreview?: (workflowId: string, executionId: string, fromNodeId: string) => Promise<ReplayValidationResult | null>;
+  onReplayFromNode?: (workflowId: string, sourceExecutionId: string, fromNodeId: string, input?: string) => void;
+}
+
+interface ReplayState {
+  nodeId: string;
+  nodeName: string;
 }
 
 function FullScreenExecutionComponent({
@@ -53,9 +61,12 @@ function FullScreenExecutionComponent({
   onReset,
   onRefreshHistory,
   onLoadHistory,
+  onFetchReplayPreview,
+  onReplayFromNode,
 }: FullScreenExecutionProps) {
   const [input, setInput] = useState('');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [replayState, setReplayState] = useState<ReplayState | null>(null);
 
   // Build node types map from workflow if not provided
   const resolvedNodeTypes = useMemo(() => {
@@ -68,6 +79,27 @@ function FullScreenExecutionComponent({
     }
     return types;
   }, [workflow, nodeTypes]);
+
+  // Check if we're viewing a historical execution (not running and has an executionId)
+  const isHistoricalView = !isRunning && executionId !== null && nodeOutputs.size > 0;
+
+  // Handle replay from node
+  const handleReplayFromNode = useCallback((nodeId: string, nodeName: string) => {
+    setReplayState({ nodeId, nodeName });
+  }, []);
+
+  // Confirm replay
+  const handleConfirmReplay = useCallback((customInput?: string) => {
+    if (workflow && executionId && replayState && onReplayFromNode) {
+      onReplayFromNode(workflow.id, executionId, replayState.nodeId, customInput);
+      setReplayState(null);
+    }
+  }, [workflow, executionId, replayState, onReplayFromNode]);
+
+  // Cancel replay
+  const handleCancelReplay = useCallback(() => {
+    setReplayState(null);
+  }, []);
 
   const handleStart = () => {
     if (workflow && input.trim()) {
@@ -145,9 +177,25 @@ function FullScreenExecutionComponent({
             selectedNodeId={selectedNodeId}
             onNodeSelect={setSelectedNodeId}
             branchResults={branchResults}
+            isHistoricalView={isHistoricalView}
+            onReplayFromNode={onReplayFromNode ? handleReplayFromNode : undefined}
           />
         </div>
       </div>
+
+      {/* Replay Modal */}
+      {replayState && workflow && executionId && onFetchReplayPreview && (
+        <ReplayModal
+          nodeName={replayState.nodeName}
+          nodeId={replayState.nodeId}
+          workflowId={workflow.id}
+          executionId={executionId}
+          originalInput={submittedInput || ''}
+          onFetchPreview={onFetchReplayPreview}
+          onConfirm={handleConfirmReplay}
+          onCancel={handleCancelReplay}
+        />
+      )}
     </div>
   );
 }

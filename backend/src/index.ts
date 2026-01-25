@@ -22,10 +22,22 @@ import {
   readExecutionSummary,
   listExecutionSummaries,
   readExecutionEvents,
+  extractNodeOutputsFromEvents,
 } from './executions/storage.js';
 import { DAGExecutionEngine } from './orchestrator/engine.js';
-import { validateWorkflow } from './orchestrator/validation.js';
-import { ExecutionEvent, ControlEvent, Workflow, ApprovalResponse } from './workflows/types.js';
+import { createReplayExecutionContext } from './orchestrator/context.js';
+import {
+  validateWorkflow,
+  validateReplayConfiguration,
+  ReplayConfiguration,
+} from './orchestrator/validation.js';
+import {
+  ExecutionEvent,
+  ControlEvent,
+  Workflow,
+  ApprovalResponse,
+  ReplayFromNodeEvent,
+} from './workflows/types.js';
 import { loadAllSchemas, getSchema, getDefaultConfig } from './schemas/index.js';
 import { submitApproval, cancelAllApprovals } from './orchestrator/executors/index.js';
 import { initializeMCPServerManager } from './mcp/server-manager.js';
@@ -205,6 +217,29 @@ app.get('/api/workflows/:id/executions/:executionId/events', async (req, res) =>
   res.json(events);
 });
 
+app.get('/api/workflows/:id/executions/:executionId/replay-preview', async (req, res) => {
+  const workflow = getWorkflow(req.params.id);
+  if (!workflow) {
+    res.status(404).json({ error: 'Workflow not found' });
+    return;
+  }
+
+  const fromNodeId = typeof req.query.fromNodeId === 'string' ? req.query.fromNodeId : '';
+  if (!fromNodeId) {
+    res.status(400).json({ error: 'fromNodeId is required' });
+    return;
+  }
+
+  const sourceExecution = await readExecutionSummary(req.params.id, req.params.executionId);
+  if (!sourceExecution) {
+    res.status(404).json({ error: 'Execution not found' });
+    return;
+  }
+
+  const validation = validateReplayConfiguration(workflow, sourceExecution, fromNodeId);
+  res.json(validation);
+});
+
 // WebSocket Events
 io.on('connection', async (socket: Socket) => {
   console.log(`Client connected: ${socket.id}`);
@@ -247,6 +282,13 @@ io.on('connection', async (socket: Socket) => {
       case 'start-execution':
         console.log(`[Socket] Starting execution for workflow: ${event.workflowId}`);
         await handleStartExecution(socket, event.workflowId, event.input);
+        break;
+
+      case 'replay-from-node':
+        console.log(
+          `[Socket] Replaying execution for workflow: ${event.workflowId} from node ${event.fromNodeId}`
+        );
+        await handleReplayExecution(socket, event);
         break;
 
       case 'interrupt':
@@ -359,6 +401,143 @@ async function handleStartExecution(
 
   try {
     await engine.execute(input);
+  } finally {
+    await eventWriteChain;
+    activeExecutions.delete(socket.id);
+  }
+}
+
+async function handleReplayExecution(
+  socket: Socket,
+  event: ReplayFromNodeEvent
+): Promise<void> {
+  const workflow = getWorkflow(event.workflowId);
+
+  if (!workflow) {
+    socket.emit('event', {
+      type: 'execution-error',
+      error: 'Workflow not found',
+    } as ExecutionEvent);
+    return;
+  }
+
+  if (activeExecutions.has(socket.id)) {
+    socket.emit('event', {
+      type: 'execution-error',
+      error: 'An execution is already running',
+    } as ExecutionEvent);
+    return;
+  }
+
+  const sourceExecution = await readExecutionSummary(
+    event.workflowId,
+    event.sourceExecutionId
+  );
+  if (!sourceExecution) {
+    socket.emit('event', {
+      type: 'execution-error',
+      error: 'Source execution not found',
+    } as ExecutionEvent);
+    return;
+  }
+
+  const validation = validateReplayConfiguration(
+    workflow,
+    sourceExecution,
+    event.fromNodeId
+  );
+  if (!validation.valid) {
+    socket.emit('event', {
+      type: 'execution-error',
+      error: validation.errors.join(' '),
+    } as ExecutionEvent);
+    return;
+  }
+
+  const sourceEvents = await readExecutionEvents(
+    event.workflowId,
+    event.sourceExecutionId
+  );
+  const sourceOutputs = extractNodeOutputsFromEvents(sourceEvents);
+  const currentNodeIds = new Set(workflow.nodes.map((node) => node.id));
+  const nodesToExecute = new Set(validation.affectedNodes.reExecuted);
+  const seedNodeOutputs = new Map<string, unknown>();
+
+  for (const [nodeId, output] of sourceOutputs) {
+    if (!currentNodeIds.has(nodeId)) continue;
+    if (nodesToExecute.has(nodeId)) continue;
+    seedNodeOutputs.set(nodeId, output);
+  }
+
+  const replayInput = event.input ?? sourceExecution.input ?? '';
+  const replayContext = createReplayExecutionContext(
+    workflow.id,
+    sourceExecution,
+    seedNodeOutputs,
+    workflow.workingDirectory
+  );
+
+  const replayConfig: ReplayConfiguration = {
+    workflowId: workflow.id,
+    sourceExecutionId: event.sourceExecutionId,
+    fromNodeId: event.fromNodeId,
+    seedNodeOutputs,
+    nodesToSkip: Array.from(seedNodeOutputs.keys()),
+    nodesToExecute: Array.from(nodesToExecute),
+  };
+
+  const engine = new DAGExecutionEngine(workflow, workflow.workingDirectory, {
+    executionContext: replayContext,
+    replay: { seedNodeOutputs: replayConfig.seedNodeOutputs },
+  });
+  const executionId = engine.getContext().executionId;
+
+  try {
+    await createExecutionSummary(workflow, executionId, replayInput, {
+      sourceExecutionId: event.sourceExecutionId,
+      fromNodeId: event.fromNodeId,
+    });
+  } catch (error) {
+    socket.emit('event', {
+      type: 'execution-error',
+      error: error instanceof Error ? error.message : 'Failed to persist execution',
+    } as ExecutionEvent);
+    return;
+  }
+
+  activeExecutions.set(socket.id, engine);
+
+  let eventWriteChain = Promise.resolve();
+
+  engine.on('event', (engineEvent: ExecutionEvent) => {
+    socket.emit('event', engineEvent);
+    const record = { timestamp: new Date().toISOString(), event: engineEvent };
+    eventWriteChain = eventWriteChain
+      .then(async () => {
+        await appendExecutionEvent(workflow.id, executionId, record);
+
+        if (
+          engineEvent.type === 'execution-start' ||
+          engineEvent.type === 'node-start' ||
+          engineEvent.type === 'node-complete' ||
+          engineEvent.type === 'node-error' ||
+          engineEvent.type === 'execution-complete' ||
+          engineEvent.type === 'execution-error'
+        ) {
+          const summary = await readExecutionSummary(workflow.id, executionId);
+          if (summary) {
+            const updated = applyExecutionEventToSummary(summary, record);
+            await saveExecutionSummary(workflow.id, executionId, updated);
+          }
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to record execution event:', error);
+      });
+  });
+
+  try {
+    await engine.execute(replayInput);
   } finally {
     await eventWriteChain;
     activeExecutions.delete(socket.id);

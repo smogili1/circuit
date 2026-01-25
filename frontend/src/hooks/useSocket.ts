@@ -12,6 +12,7 @@ import {
   ApprovalRequest,
   ApprovalResponse,
   WorkflowValidationError,
+  ReplayValidationResult,
 } from '../types/workflow';
 
 interface NodeOutput {
@@ -466,6 +467,48 @@ export function useSocket() {
     setExecution(prev => ({ ...prev, validationErrors: null }));
   }, []);
 
+  const fetchReplayPreview = useCallback(async (
+    workflowId: string,
+    executionId: string,
+    fromNodeId: string
+  ): Promise<ReplayValidationResult | null> => {
+    try {
+      const response = await fetch(
+        `/api/workflows/${workflowId}/executions/${executionId}/replay-preview?fromNodeId=${encodeURIComponent(fromNodeId)}`
+      );
+      if (!response.ok) {
+        console.error('Failed to fetch replay preview');
+        return null;
+      }
+      return (await response.json()) as ReplayValidationResult;
+    } catch (error) {
+      console.error('Failed to fetch replay preview:', error);
+      return null;
+    }
+  }, []);
+
+  const replayFromNode = useCallback((
+    workflowId: string,
+    sourceExecutionId: string,
+    fromNodeId: string,
+    input?: string
+  ) => {
+    console.log('[useSocket] Replaying from node:', { workflowId, sourceExecutionId, fromNodeId, input: input?.slice(0, 100) });
+    // Track the submitted input immediately (use original input if not overridden)
+    if (input) {
+      setExecution(prev => ({ ...prev, submittedInput: input }));
+    }
+    const event: ControlEvent = {
+      type: 'replay-from-node',
+      workflowId,
+      sourceExecutionId,
+      fromNodeId,
+      input,
+    };
+    console.log('[useSocket] Emitting control event:', event.type);
+    socketRef.current?.emit('control', event);
+  }, []);
+
   return {
     isConnected,
     workflows,
@@ -480,5 +523,7 @@ export function useSocket() {
     clearValidationErrors,
     fetchExecutionHistory,
     loadExecutionHistory,
+    fetchReplayPreview,
+    replayFromNode,
   };
 }

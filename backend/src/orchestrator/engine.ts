@@ -39,16 +39,27 @@ export class DAGExecutionEngine extends EventEmitter {
   private outputDirectory: string;
   private workflowInput: string = '';
   private runningNodeAbortControllers: Map<string, AbortController> = new Map();
+  private replaySeededNodeIds: Set<string> = new Set();
+  private replayMode: boolean = false;
 
-  constructor(workflow: Workflow, workingDirectory?: string) {
+  constructor(
+    workflow: Workflow,
+    workingDirectory?: string,
+    options?: {
+      executionContext?: ExecutionContext;
+      replay?: { seedNodeOutputs: Map<string, unknown> };
+    }
+  ) {
     super();
     this.workflow = workflow;
-    this.context = createExecutionContext(workflow.id, workingDirectory);
+    this.context =
+      options?.executionContext || createExecutionContext(workflow.id, workingDirectory);
     this.nodeStates = new Map();
     this.agents = new Map();
     this.structuredOutputs = new Map();
+    this.replayMode = Boolean(options?.replay);
     this.outputDirectory = path.join(
-      workingDirectory || process.cwd(),
+      this.context.workingDirectory || process.cwd(),
       '.workflow-outputs',
       this.context.executionId
     );
@@ -67,6 +78,10 @@ export class DAGExecutionEngine extends EventEmitter {
     // Initialize all nodes as pending
     for (const node of workflow.nodes) {
       this.nodeStates.set(node.id, { status: 'pending' });
+    }
+
+    if (options?.replay?.seedNodeOutputs) {
+      this.seedReplayState(options.replay.seedNodeOutputs);
     }
   }
 
@@ -88,10 +103,17 @@ export class DAGExecutionEngine extends EventEmitter {
       workflowId: this.workflow.id,
     } as ExecutionEvent);
 
+    if (this.replayMode && this.replaySeededNodeIds.size > 0) {
+      this.emitReplaySeededNodes();
+    }
+
     try {
       // Execute input nodes first (they don't use the registry pattern)
       const inputNodes = this.workflow.nodes.filter((n) => n.type === 'input');
       for (const node of inputNodes) {
+        if (this.replaySeededNodeIds.has(node.id)) {
+          continue;
+        }
         setNodeOutput(this.context, node.id, input);
         this.updateNodeState(node.id, 'complete', input);
       }
@@ -462,6 +484,46 @@ export class DAGExecutionEngine extends EventEmitter {
     };
   }
 
+  private seedReplayState(seedNodeOutputs: Map<string, unknown>): void {
+    for (const [nodeId, output] of seedNodeOutputs) {
+      if (!this.nodeStates.has(nodeId)) continue;
+      this.context.nodeOutputs.set(nodeId, output);
+      this.updateNodeState(nodeId, 'complete', output);
+      this.replaySeededNodeIds.add(nodeId);
+    }
+
+    this.applyReplayBranchSkipping(seedNodeOutputs);
+  }
+
+  private applyReplayBranchSkipping(seedNodeOutputs: Map<string, unknown>): void {
+    for (const [nodeId, output] of seedNodeOutputs) {
+      const node = this.workflow.nodes.find((n) => n.id === nodeId);
+      if (!node) continue;
+      const executor = executorRegistry.get(node.type);
+      if (!executor.getOutputHandle) continue;
+      const activeHandle = executor.getOutputHandle({ output, metadata: {} }, node);
+      if (activeHandle) {
+        this.skipInactiveBranches(nodeId, activeHandle);
+      }
+    }
+  }
+
+  private emitReplaySeededNodes(): void {
+    for (const node of this.workflow.nodes) {
+      if (!this.replaySeededNodeIds.has(node.id)) continue;
+      this.emit('event', {
+        type: 'node-start',
+        nodeId: node.id,
+        nodeName: node.data.name,
+      } as ExecutionEvent);
+      this.emit('event', {
+        type: 'node-complete',
+        nodeId: node.id,
+        result: this.context.nodeOutputs.get(node.id),
+      } as ExecutionEvent);
+    }
+  }
+
   /**
    * Execute a single node using its registered executor.
    */
@@ -589,6 +651,15 @@ export class DAGExecutionEngine extends EventEmitter {
           // Reset it and its successors so they can execute
           this.resetSkippedBranch(edge.target);
         }
+      }
+    }
+  }
+
+  private skipInactiveBranches(nodeId: string, activeHandle: string): void {
+    const outgoingEdges = this.workflow.edges.filter((e) => e.source === nodeId);
+    for (const edge of outgoingEdges) {
+      if (edge.sourceHandle !== activeHandle) {
+        this.skipNode(edge.target, nodeId);
       }
     }
   }

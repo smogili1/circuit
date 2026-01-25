@@ -7,6 +7,7 @@ export { LogViewer } from './LogViewer';
 export { MiniWorkflowView } from './MiniWorkflowView';
 export { ExecutionControls } from './ExecutionControls';
 export { ExecutionHistory } from './ExecutionHistory';
+export { ReplayModal } from './ReplayModal';
 
 // Status and indicator components
 export {

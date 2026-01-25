@@ -290,9 +290,25 @@ export interface ExecutionSummary {
 
 export type ControlEvent =
   | { type: 'start-execution'; workflowId: string; input: string }
+  | { type: 'replay-from-node'; workflowId: string; sourceExecutionId: string; fromNodeId: string; input?: string }
   | { type: 'interrupt'; executionId: string }
   | { type: 'resume'; executionId: string }
   | { type: 'submit-approval'; executionId: string; nodeId: string; response: ApprovalResponse };
+
+// =============================================================================
+// Replay Types
+// =============================================================================
+
+export interface ReplayValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  affectedNodes: {
+    reused: string[];
+    reExecuted: string[];
+    new: string[];
+  };
+}
 
 // =============================================================================
 // Constants

@@ -4,6 +4,7 @@
  */
 
 import { Workflow, WorkflowNode, WorkflowEdge } from '../workflows/types.js';
+import type { ExecutionSummary } from '../executions/storage.js';
 
 export interface ValidationError {
   code: string;
@@ -14,6 +15,26 @@ export interface ValidationError {
 export interface ValidationResult {
   valid: boolean;
   errors: ValidationError[];
+}
+
+export interface ReplayConfiguration {
+  workflowId: string;
+  sourceExecutionId: string;
+  fromNodeId: string;
+  seedNodeOutputs: Map<string, unknown>;
+  nodesToSkip: string[];
+  nodesToExecute: string[];
+}
+
+export interface ReplayValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  affectedNodes: {
+    reused: string[];
+    reExecuted: string[];
+    new: string[];
+  };
 }
 
 /**
@@ -33,6 +54,42 @@ function getReachableNodes(startId: string, edges: WorkflowEdge[]): Set<string> 
   }
 
   return reachable;
+}
+
+function getPredecessorIds(nodeId: string, edges: WorkflowEdge[]): string[] {
+  return edges.filter((edge) => edge.target === nodeId).map((edge) => edge.source);
+}
+
+function getSuccessorIds(nodeId: string, edges: WorkflowEdge[]): string[] {
+  return edges.filter((edge) => edge.source === nodeId).map((edge) => edge.target);
+}
+
+function getAllAncestorIds(nodeId: string, edges: WorkflowEdge[]): string[] {
+  const ancestors = new Set<string>();
+  const queue = getPredecessorIds(nodeId, edges);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (current === nodeId || ancestors.has(current)) continue;
+    ancestors.add(current);
+    queue.push(...getPredecessorIds(current, edges));
+  }
+
+  return Array.from(ancestors);
+}
+
+function getAllDescendantIds(nodeId: string, edges: WorkflowEdge[]): string[] {
+  const descendants = new Set<string>();
+  const queue = getSuccessorIds(nodeId, edges);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (current === nodeId || descendants.has(current)) continue;
+    descendants.add(current);
+    queue.push(...getSuccessorIds(current, edges));
+  }
+
+  return Array.from(descendants);
 }
 
 /**
@@ -129,5 +186,76 @@ export function validateWorkflow(workflow: Workflow): ValidationResult {
   return {
     valid: errors.length === 0,
     errors,
+  };
+}
+
+export function validateReplayConfiguration(
+  workflow: Workflow,
+  sourceExecution: ExecutionSummary,
+  fromNodeId: string
+): ReplayValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (sourceExecution.workflowId !== workflow.id) {
+    errors.push('Source execution does not belong to the selected workflow.');
+  }
+
+  const fromNode = workflow.nodes.find((node) => node.id === fromNodeId);
+  if (!fromNode) {
+    errors.push('Replay start node does not exist in the current workflow.');
+  }
+
+  const sourceNodes = sourceExecution.nodes || {};
+  const sourceNodeIds = new Set(Object.keys(sourceNodes));
+  const currentNodeIds = new Set(workflow.nodes.map((node) => node.id));
+
+  const newNodes = workflow.nodes
+    .filter((node) => !sourceNodeIds.has(node.id) && node.type !== 'input')
+    .map((node) => node.id);
+
+  if (sourceNodeIds.size > 0) {
+    const removedNodes = Array.from(sourceNodeIds).filter(
+      (nodeId) => !currentNodeIds.has(nodeId)
+    );
+    if (newNodes.length > 0 || removedNodes.length > 0) {
+      warnings.push(
+        'Workflow structure has changed since the source execution; replay may not be fully compatible.'
+      );
+    }
+  } else {
+    warnings.push('Source execution does not include node history; replay validation is limited.');
+  }
+
+  const reExecuted = fromNode
+    ? [fromNodeId, ...getAllDescendantIds(fromNodeId, workflow.edges)]
+    : [];
+
+  const reused: string[] = [];
+  if (fromNode) {
+    const ancestorIds = getAllAncestorIds(fromNodeId, workflow.edges);
+    for (const ancestorId of ancestorIds) {
+      const summary = sourceNodes[ancestorId];
+      if (!summary) {
+        errors.push(`Upstream node "${ancestorId}" is missing in the source execution.`);
+        continue;
+      }
+      if (summary.status === 'complete') {
+        reused.push(ancestorId);
+      } else {
+        errors.push(`Upstream node "${ancestorId}" did not complete in the source execution.`);
+      }
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+    affectedNodes: {
+      reused,
+      reExecuted,
+      new: newNodes,
+    },
   };
 }

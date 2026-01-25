@@ -24,6 +24,7 @@ export interface ExecutionSummary {
   workflowId: string;
   workflowName?: string;
   input: string;
+  replay?: ReplayMetadata;
   status: ExecutionStatus;
   startedAt: string;
   completedAt?: string;
@@ -32,6 +33,11 @@ export interface ExecutionSummary {
   workingDirectory?: string;
   outputDirectory?: string;
   nodes?: Record<string, ExecutionNodeSummary>;
+}
+
+export interface ReplayMetadata {
+  sourceExecutionId: string;
+  fromNodeId: string;
 }
 
 // Directory for storing execution history (in top-level data/ folder)
@@ -73,7 +79,8 @@ export async function initializeExecutionStorage(): Promise<void> {
 export async function createExecutionSummary(
   workflow: Workflow,
   executionId: string,
-  input: string
+  input: string,
+  replay?: ReplayMetadata
 ): Promise<ExecutionSummary> {
   await ensureExecutionsDir();
 
@@ -82,6 +89,7 @@ export async function createExecutionSummary(
     workflowId: workflow.id,
     workflowName: workflow.name,
     input,
+    replay,
     status: 'running',
     startedAt: new Date().toISOString(),
     workingDirectory: workflow.workingDirectory,
@@ -168,6 +176,27 @@ export async function readExecutionEvents(
   } catch {
     return [];
   }
+}
+
+export function extractNodeOutputsFromEvents(
+  events: ExecutionEventRecord[]
+): Map<string, unknown> {
+  const outputs = new Map<string, unknown>();
+  const startedNodes = new Set<string>();
+
+  for (const record of events) {
+    const event = record.event;
+    if (event.type === 'node-start') {
+      startedNodes.add(event.nodeId);
+      continue;
+    }
+
+    if (event.type === 'node-complete' && startedNodes.has(event.nodeId)) {
+      outputs.set(event.nodeId, event.result);
+    }
+  }
+
+  return outputs;
 }
 
 export async function updateExecutionSummary(

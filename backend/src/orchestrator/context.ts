@@ -1,4 +1,5 @@
 import { ExecutionContext } from '../workflows/types.js';
+import type { ExecutionSummary } from '../executions/storage.js';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -14,6 +15,27 @@ export function createExecutionContext(
     nodeOutputs: new Map(),
     variables: new Map(),
     workingDirectory,
+  };
+}
+
+/**
+ * Creates a replay execution context pre-seeded with prior outputs.
+ */
+export function createReplayExecutionContext(
+  workflowId: string,
+  sourceExecution: ExecutionSummary,
+  nodeOutputs: Map<string, unknown>,
+  workingDirectory?: string
+): ExecutionContext {
+  const resolvedWorkingDirectory =
+    workingDirectory || sourceExecution.workingDirectory || process.cwd();
+
+  return {
+    workflowId,
+    executionId: uuidv4(),
+    nodeOutputs: new Map(nodeOutputs),
+    variables: new Map(),
+    workingDirectory: resolvedWorkingDirectory,
   };
 }
 

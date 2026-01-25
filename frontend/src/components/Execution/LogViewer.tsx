@@ -17,6 +17,7 @@ import {
   MessageSquare,
   AlertCircle,
   X,
+  RotateCcw,
 } from 'lucide-react';
 import { AgentEvent, NodeStatus, NodeType } from '../../types/workflow';
 import { EventItem, GroupedEvent } from './EventItem';
@@ -40,6 +41,8 @@ interface LogViewerProps {
   selectedNodeId: string | null;
   onNodeSelect: (nodeId: string | null) => void;
   branchResults?: Map<string, boolean>;
+  isHistoricalView?: boolean;
+  onReplayFromNode?: (nodeId: string, nodeName: string) => void;
 }
 
 const nodeTypeIcons: Record<string, typeof Sparkles> = {
@@ -105,6 +108,8 @@ function LogViewerComponent({
   selectedNodeId,
   onNodeSelect,
   branchResults = new Map(),
+  isHistoricalView = false,
+  onReplayFromNode,
 }: LogViewerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -409,6 +414,22 @@ function LogViewerComponent({
                           ? output.result
                           : JSON.stringify(output.result, null, 2)}
                       </pre>
+                    </div>
+                  )}
+
+                  {/* Replay button - only show for historical views */}
+                  {isHistoricalView && onReplayFromNode && nodeType !== 'input' && (
+                    <div className="mt-3 pt-3 border-t border-gray-800">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onReplayFromNode(nodeId, nodeName);
+                        }}
+                        className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-md transition-colors"
+                      >
+                        <RotateCcw size={12} />
+                        Replay from here
+                      </button>
                     </div>
                   )}
                 </div>

@@ -317,7 +317,7 @@ nodes:
     data:
       type: bash
       name: Run Backend Tests
-      command: npm test -- --json 2>&1 || true
+      script: npm test -- --json 2>&1 || true
       parseJson: false
   - id: parse-test-results
     type: javascript
