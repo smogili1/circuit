@@ -32,7 +32,7 @@ export const bashExecutor: NodeExecutor = {
     emit: ExecutorEmitter
   ): Promise<ExecutionResult> {
     const config = node.data as BashNodeConfig;
-    const timeout = config.timeout ?? 30000;
+    const timeout = config.timeout;
     const workingDir = context.getWorkingDirectory(config.workingDirectory);
 
     // Interpolate references in the script
@@ -59,11 +59,15 @@ export const bashExecutor: NodeExecutor = {
         }
       };
 
-      const timeoutId = setTimeout(() => {
-        timedOut = true;
-        cleanup();
-        reject(new Error(`Bash execution timed out after ${timeout}ms`));
-      }, timeout);
+      // Only set timeout if configured
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      if (timeout !== undefined && timeout > 0) {
+        timeoutId = setTimeout(() => {
+          timedOut = true;
+          cleanup();
+          reject(new Error(`Bash execution timed out after ${timeout}ms`));
+        }, timeout);
+      }
 
       // Handle abort signal
       const abortHandler = () => {

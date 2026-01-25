@@ -32,8 +32,7 @@ echo "Hello World"`,
     timeout: {
       type: 'number',
       displayName: 'Timeout (ms)',
-      default: 30000,
-      description: 'Maximum execution time in milliseconds',
+      description: 'Maximum execution time in milliseconds (no timeout if not set)',
     },
     workingDirectory: {
       type: 'string',
