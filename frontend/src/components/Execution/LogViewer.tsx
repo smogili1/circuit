@@ -357,6 +357,23 @@ function LogViewerComponent({
                   )}
 
                   <StatusBadge status={status} />
+
+                  {/* Replay button in header - compact when collapsed, full when expanded */}
+                  {isHistoricalView && onReplayFromNode && nodeType !== 'input' && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onReplayFromNode(nodeId, nodeName);
+                      }}
+                      className={`flex items-center gap-1.5 text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-md transition-colors ${
+                        isExpanded ? 'px-2.5 py-1 text-xs font-medium' : 'p-1.5'
+                      }`}
+                      title="Replay from here"
+                    >
+                      <RotateCcw size={isExpanded ? 12 : 14} />
+                      {isExpanded && <span>Replay</span>}
+                    </button>
+                  )}
                 </div>
               </button>
 
@@ -414,22 +431,6 @@ function LogViewerComponent({
                           ? output.result
                           : JSON.stringify(output.result, null, 2)}
                       </pre>
-                    </div>
-                  )}
-
-                  {/* Replay button - only show for historical views */}
-                  {isHistoricalView && onReplayFromNode && nodeType !== 'input' && (
-                    <div className="mt-3 pt-3 border-t border-gray-800">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onReplayFromNode(nodeId, nodeName);
-                        }}
-                        className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-md transition-colors"
-                      >
-                        <RotateCcw size={12} />
-                        Replay from here
-                      </button>
                     </div>
                   )}
                 </div>
