@@ -1,0 +1,104 @@
+id: claude-02-json
+name: "Test: Claude JSON Output"
+description: |
+  Tests: JSON structured output with schema
+  Input: "Generate exactly: name=Apple, color=Red, sweet=true"
+  Expected: { name: "Apple", color: "Red", sweet: true }
+workingDirectory: /tmp/agent-tests
+nodes:
+  - id: input-1
+    type: input
+    position:
+      x: 100
+      y: 200
+    data:
+      type: input
+      name: Input
+      description: "Generate exactly: name=Apple, color=Red, sweet=true"
+
+  - id: claude-fruit
+    type: claude-agent
+    position:
+      x: 350
+      y: 200
+    data:
+      type: claude-agent
+      name: FruitAgent
+      userQuery: "{{Input.prompt}}"
+      model: haiku
+      systemPrompt: "Output the exact values requested. Do not deviate."
+      tools: []
+      maxTurns: 1
+      conversationMode: fresh
+      outputConfig:
+        format: json
+        schema: |-
+          {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "color": { "type": "string" },
+              "sweet": { "type": "boolean" }
+            },
+            "required": ["name", "color", "sweet"]
+          }
+
+  - id: validator
+    type: javascript
+    position:
+      x: 600
+      y: 200
+    data:
+      type: javascript
+      name: Validator
+      code: |
+        const agent = inputs.FruitAgent;
+
+        const checks = {
+          nameIsString: typeof agent.name === 'string',
+          nameIsApple: agent.name === 'Apple',
+          colorIsString: typeof agent.color === 'string',
+          colorIsRed: agent.color === 'Red',
+          sweetIsBoolean: typeof agent.sweet === 'boolean',
+          sweetIsTrue: agent.sweet === true
+        };
+
+        const passed = Object.values(checks).every(v => v === true);
+
+        return {
+          passed,
+          checks,
+          actual: {
+            name: agent.name,
+            color: agent.color,
+            sweet: agent.sweet
+          },
+          expected: {
+            name: "Apple",
+            color: "Red",
+            sweet: true
+          }
+        };
+
+  - id: output-1
+    type: output
+    position:
+      x: 850
+      y: 200
+    data:
+      type: output
+      name: Output
+
+edges:
+  - id: edge-1
+    source: input-1
+    target: claude-fruit
+  - id: edge-2
+    source: claude-fruit
+    target: validator
+  - id: edge-3
+    source: validator
+    target: output-1
+
+createdAt: '2026-01-12T00:00:00.000Z'
+updatedAt: '2026-01-12T00:00:00.000Z'

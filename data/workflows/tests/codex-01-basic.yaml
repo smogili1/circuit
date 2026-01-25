@@ -1,0 +1,98 @@
+id: codex-01-basic
+name: "Test: Codex Basic Features"
+description: |
+  Tests: basic execution, reference interpolation, text output, baseInstructions, model, approvalPolicy, sandbox, runCount
+  Input: "What is 12 times 5?"
+  Expected: result contains "60", runCount = 1, transcript not empty
+workingDirectory: /tmp/agent-tests
+nodes:
+  - id: input-1
+    type: input
+    position:
+      x: 100
+      y: 200
+    data:
+      type: input
+      name: Input
+      description: "What is 12 times 5?"
+
+  - id: codex-math
+    type: codex-agent
+    position:
+      x: 350
+      y: 200
+    data:
+      type: codex-agent
+      name: MathAgent
+      userQuery: "{{Input.prompt}} Reply with ONLY the number, nothing else."
+      model: gpt-5.2-codex
+      approvalPolicy: never
+      sandbox: read-only
+      baseInstructions: "You are a calculator. Only output the numeric answer. No words, no explanation, just the number."
+      mcpServers: []
+      conversationMode: fresh
+      outputConfig:
+        format: text
+      rejectionHandler:
+        enabled: false
+
+  - id: validator
+    type: javascript
+    position:
+      x: 600
+      y: 200
+    data:
+      type: javascript
+      name: Validator
+      code: |
+        const agent = inputs.MathAgent;
+        const result = agent.result || '';
+        const runCount = agent.runCount;
+        const transcript = agent.transcript || '';
+
+        const checks = {
+          hasResult: typeof result === 'string' && result.length > 0,
+          resultContains60: result.includes('60'),
+          runCountIs1: runCount === 1,
+          hasTranscript: transcript.length > 0
+        };
+
+        const passed = Object.values(checks).every(v => v === true);
+
+        return {
+          passed,
+          checks,
+          actual: {
+            result,
+            runCount,
+            transcriptLength: transcript.length
+          },
+          expected: {
+            result: "60",
+            runCount: 1,
+            hasTranscript: true
+          }
+        };
+
+  - id: output-1
+    type: output
+    position:
+      x: 850
+      y: 200
+    data:
+      type: output
+      name: Output
+
+edges:
+  - id: edge-1
+    source: input-1
+    target: codex-math
+  - id: edge-2
+    source: codex-math
+    target: validator
+  - id: edge-3
+    source: validator
+    target: output-1
+
+createdAt: '2026-01-12T00:00:00.000Z'
+updatedAt: '2026-01-12T00:00:00.000Z'

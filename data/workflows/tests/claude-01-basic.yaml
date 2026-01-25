@@ -1,0 +1,95 @@
+id: claude-01-basic
+name: "Test: Claude Basic Features"
+description: |
+  Tests: basic execution, reference interpolation, text output, system prompt, model (haiku), maxTurns, runCount
+  Input: "What is 7 plus 8?"
+  Expected: result contains "15", runCount = 1, transcript not empty
+workingDirectory: /tmp/agent-tests
+nodes:
+  - id: input-1
+    type: input
+    position:
+      x: 100
+      y: 200
+    data:
+      type: input
+      name: Input
+      description: "What is 7 plus 8?"
+
+  - id: claude-math
+    type: claude-agent
+    position:
+      x: 350
+      y: 200
+    data:
+      type: claude-agent
+      name: MathAgent
+      userQuery: "{{Input.prompt}} Reply with ONLY the number, nothing else."
+      model: haiku
+      systemPrompt: "You are a calculator. Only output the numeric answer. No words, no explanation, just the number."
+      tools: []
+      maxTurns: 1
+      conversationMode: fresh
+      outputConfig:
+        format: text
+
+  - id: validator
+    type: javascript
+    position:
+      x: 600
+      y: 200
+    data:
+      type: javascript
+      name: Validator
+      code: |
+        const agent = inputs.MathAgent;
+        const result = agent.result || '';
+        const runCount = agent.runCount;
+        const transcript = agent.transcript || '';
+
+        const checks = {
+          hasResult: typeof result === 'string' && result.length > 0,
+          resultContains15: result.includes('15'),
+          runCountIs1: runCount === 1,
+          hasTranscript: transcript.length > 0
+        };
+
+        const passed = Object.values(checks).every(v => v === true);
+
+        return {
+          passed,
+          checks,
+          actual: {
+            result,
+            runCount,
+            transcriptLength: transcript.length
+          },
+          expected: {
+            result: "15",
+            runCount: 1,
+            hasTranscript: true
+          }
+        };
+
+  - id: output-1
+    type: output
+    position:
+      x: 850
+      y: 200
+    data:
+      type: output
+      name: Output
+
+edges:
+  - id: edge-1
+    source: input-1
+    target: claude-math
+  - id: edge-2
+    source: claude-math
+    target: validator
+  - id: edge-3
+    source: validator
+    target: output-1
+
+createdAt: '2026-01-12T00:00:00.000Z'
+updatedAt: '2026-01-12T00:00:00.000Z'

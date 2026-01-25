@@ -28,4 +28,5 @@ Thumbs.db
 coverage/
 
 # User data (workflows, MCP configs, executions)
-data/
+data/executions
+

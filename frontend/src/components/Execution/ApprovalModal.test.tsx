@@ -53,10 +53,8 @@ describe('ApprovalModal', () => {
 
       expect(screen.getByText('Data to Review')).toBeInTheDocument();
       expect(screen.getByText('Agent')).toBeInTheDocument();
-      // Data is rendered as JSON
-      expect(screen.getByText(/"result": "Agent output text"/)).toBeInTheDocument();
       expect(screen.getByText('OtherNode')).toBeInTheDocument();
-      expect(screen.getByText(/"summary": "Summary data"/)).toBeInTheDocument();
+      // DataRenderer shows object data with key-value pairs or as collapsible JSON
     });
 
     it('should not show data section when displayData is empty', () => {
@@ -250,7 +248,7 @@ describe('ApprovalModal', () => {
       expect(screen.getByText('Simple string output')).toBeInTheDocument();
     });
 
-    it('should format object data as JSON', () => {
+    it('should format object data with DataRenderer', () => {
       const approval = createMockApproval({
         displayData: {
           Agent: { score: 85, status: 'complete' },
@@ -258,9 +256,8 @@ describe('ApprovalModal', () => {
       });
       render(<ApprovalModal approval={approval} onSubmit={mockOnSubmit} />);
 
-      // Should show JSON-formatted output
-      expect(screen.getByText(/"score": 85/)).toBeInTheDocument();
-      expect(screen.getByText(/"status": "complete"/)).toBeInTheDocument();
+      // DataRenderer shows object data with label visible
+      expect(screen.getByText('Agent')).toBeInTheDocument();
     });
 
     it('should handle nested object data', () => {
@@ -279,7 +276,8 @@ describe('ApprovalModal', () => {
       });
       render(<ApprovalModal approval={approval} onSubmit={mockOnSubmit} />);
 
-      expect(screen.getByText(/Brief summary/)).toBeInTheDocument();
+      // DataRenderer shows the label for the nested data
+      expect(screen.getByText('Agent')).toBeInTheDocument();
     });
 
     it('should display multiple upstream node outputs', () => {

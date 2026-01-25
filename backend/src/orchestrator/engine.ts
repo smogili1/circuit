@@ -18,7 +18,7 @@ import {
   setVariable,
   getVariable,
 } from './context.js';
-import { interpolateReferences, buildNodeNameMap } from './references.js';
+import { interpolateReferences, buildNodeNameMap, parseReference, resolveReference } from './references.js';
 import { executorRegistry, ExecutorContext, ExecutorEmitter } from './executors/index.js';
 import { ExecutionError, ErrorCodes } from './errors.js';
 
@@ -405,6 +405,19 @@ export class DAGExecutionEngine extends EventEmitter {
         );
       },
 
+      resolveReference(reference: string): unknown {
+        const parsed = parseReference(reference);
+        if (!parsed) {
+          return undefined;
+        }
+        return resolveReference(
+          parsed,
+          self.context.nodeOutputs,
+          self.nodeNameToId,
+          self.context.variables
+        );
+      },
+
       setVariable(name: string, value: unknown): void {
         setVariable(self.context, name, value);
       },
@@ -554,9 +567,11 @@ export class DAGExecutionEngine extends EventEmitter {
 
     // Step 1: Skip all inactive branches first
     // Loop targets are still 'complete' at this point, so skipNode won't affect them
+    // Pass nodeId as skipFromPredecessorId so the condition node itself isn't counted
+    // as an active predecessor for nodes on the inactive branch
     for (const edge of outgoingEdges) {
       if (edge.sourceHandle !== activeHandle) {
-        this.skipNode(edge.target);
+        this.skipNode(edge.target, nodeId);
       }
     }
 
@@ -647,23 +662,60 @@ export class DAGExecutionEngine extends EventEmitter {
 
   /**
    * Skip a node and all its successors.
+   * Only skips a node if ALL its predecessors are skipped (no active input paths).
+   * @param nodeId - The node to skip
+   * @param skipFromPredecessorId - Optional: the predecessor triggering the skip (e.g., a condition node).
+   *                                This predecessor won't count as an "active" path.
    */
-  private skipNode(nodeId: string): void {
+  private skipNode(nodeId: string, skipFromPredecessorId?: string): void {
     const state = this.nodeStates.get(nodeId);
-    if (state?.status === 'pending') {
-      this.updateNodeState(nodeId, 'skipped');
+    if (state?.status !== 'pending') {
+      return;
+    }
 
-      this.emit('event', {
-        type: 'node-complete',
-        nodeId,
-        result: null,
-      } as ExecutionEvent);
-
-      // Recursively skip successors
-      const successorIds = this.getSuccessorIds(nodeId);
-      for (const successorId of successorIds) {
-        this.skipNode(successorId);
+    // Check if this node has any predecessors that might still provide input
+    // A node should NOT be skipped if it has any predecessor that is:
+    // - 'pending' (not yet executed, might be on an active path)
+    // - 'running' (currently executing)
+    // - 'complete' (already has output that this node can use)
+    // EXCEPT: if that predecessor is the one triggering this skip (e.g., a condition node
+    // that decided this branch is inactive)
+    const predecessorIds = this.getPredecessorIds(nodeId);
+    const hasActivePredecessor = predecessorIds.some((predId) => {
+      // If this predecessor is the one that triggered the skip, don't count it as active
+      if (predId === skipFromPredecessorId) {
+        return false;
       }
+      const predState = this.nodeStates.get(predId);
+      return (
+        predState?.status === 'pending' ||
+        predState?.status === 'running' ||
+        predState?.status === 'complete'
+      );
+    });
+
+    if (hasActivePredecessor) {
+      // Don't skip this node - it might still receive input from another path
+      console.log(
+        `[Engine] Not skipping ${nodeId} - has active predecessor(s)`
+      );
+      return;
+    }
+
+    // All predecessors are skipped or error, safe to skip this node
+    console.log(`[Engine] Skipping node ${nodeId} - all predecessors skipped`);
+    this.updateNodeState(nodeId, 'skipped');
+
+    this.emit('event', {
+      type: 'node-complete',
+      nodeId,
+      result: null,
+    } as ExecutionEvent);
+
+    // Recursively skip successors
+    const successorIds = this.getSuccessorIds(nodeId);
+    for (const successorId of successorIds) {
+      this.skipNode(successorId);
     }
   }
 

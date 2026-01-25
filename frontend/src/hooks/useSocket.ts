@@ -5,6 +5,7 @@ import {
   ExecutionEvent,
   ControlEvent,
   NodeStatus,
+  NodeType,
   AgentEvent,
   ExecutionSummary,
   ExecutionEventRecord,
@@ -16,6 +17,7 @@ import {
 interface NodeOutput {
   nodeId: string;
   nodeName?: string;
+  nodeType?: NodeType;
   events: AgentEvent[];
   result?: unknown;
   error?: string;
@@ -23,12 +25,24 @@ interface NodeOutput {
   completedAt?: number;
 }
 
+// Branch path tracking for condition/approval nodes
+export interface BranchPath {
+  nodeId: string;
+  nodeName: string;
+  condition: boolean;
+  takenAt: string;
+}
+
 interface ExecutionState {
   isRunning: boolean;
   executionId: string | null;
   submittedInput: string | null;
+  executionStartedAt: number | null;
   nodeStates: Map<string, NodeStatus>;
   nodeOutputs: Map<string, NodeOutput>;
+  nodeTypes: Map<string, NodeType>;
+  branchPaths: BranchPath[];
+  branchResults: Map<string, boolean>;
   finalResult: unknown | null;
   pendingApproval: ApprovalRequest | null;
   validationErrors: WorkflowValidationError[] | null;
@@ -53,8 +67,12 @@ export function useSocket() {
     isRunning: false,
     executionId: null,
     submittedInput: null,
+    executionStartedAt: null,
     nodeStates: new Map(),
     nodeOutputs: new Map(),
+    nodeTypes: new Map(),
+    branchPaths: [],
+    branchResults: new Map(),
     finalResult: null,
     pendingApproval: null,
     validationErrors: null,
@@ -114,12 +132,19 @@ export function useSocket() {
     (summary: ExecutionSummary, events: ExecutionEventRecord[]): ExecutionState => {
       const nodeStates = new Map<string, NodeStatus>();
       const nodeOutputs = new Map<string, NodeOutput>();
+      const nodeTypes = new Map<string, NodeType>();
+      const branchPaths: BranchPath[] = [];
+      const branchResults = new Map<string, boolean>();
       let finalResult: unknown | null = summary.finalResult ?? null;
+      let executionStartedAt: number | null = null;
 
       for (const record of events) {
         const event = record.event;
 
         switch (event.type) {
+          case 'execution-start':
+            executionStartedAt = Date.parse(record.timestamp);
+            break;
           case 'node-start':
             nodeStates.set(event.nodeId, 'running');
             // Preserve existing events if this node is re-running (e.g., in a loop)
@@ -152,6 +177,16 @@ export function useSocket() {
                 completedAt: Date.parse(record.timestamp),
               });
             }
+            // Track branch results for condition nodes (result is boolean)
+            if (typeof event.result === 'boolean') {
+              branchResults.set(event.nodeId, event.result);
+              branchPaths.push({
+                nodeId: event.nodeId,
+                nodeName: output?.nodeName || event.nodeId,
+                condition: event.result,
+                takenAt: record.timestamp,
+              });
+            }
             break;
           }
           case 'node-error': {
@@ -181,8 +216,12 @@ export function useSocket() {
         isRunning: false,
         executionId: summary.executionId,
         submittedInput: summary.input ?? null,
+        executionStartedAt,
         nodeStates,
         nodeOutputs,
+        nodeTypes,
+        branchPaths,
+        branchResults,
         finalResult,
         pendingApproval: null,
         validationErrors: null,
@@ -195,6 +234,8 @@ export function useSocket() {
     setExecution((prev) => {
       const newNodeStates = new Map(prev.nodeStates);
       const newNodeOutputs = new Map(prev.nodeOutputs);
+      const newBranchResults = new Map(prev.branchResults);
+      const newBranchPaths = [...prev.branchPaths];
 
       switch (event.type) {
         case 'execution-start':
@@ -202,8 +243,12 @@ export function useSocket() {
             isRunning: true,
             executionId: event.executionId,
             submittedInput: prev.submittedInput, // Preserve the submitted input
+            executionStartedAt: Date.now(),
             nodeStates: new Map(),
             nodeOutputs: new Map(),
+            nodeTypes: new Map(),
+            branchPaths: [],
+            branchResults: new Map(),
             finalResult: null,
             pendingApproval: null,
             validationErrors: null, // Clear any previous validation errors
@@ -252,12 +297,24 @@ export function useSocket() {
               completedAt: Date.now(),
             });
           }
+          // Track branch results for condition/approval nodes (result is boolean)
+          if (typeof event.result === 'boolean') {
+            newBranchResults.set(event.nodeId, event.result);
+            newBranchPaths.push({
+              nodeId: event.nodeId,
+              nodeName: nodeOutput?.nodeName || event.nodeId,
+              condition: event.result,
+              takenAt: new Date().toISOString(),
+            });
+          }
           // Clear pending approval if this was the approval node
           const clearApproval = prev.pendingApproval?.nodeId === event.nodeId;
           return {
             ...prev,
             nodeStates: newNodeStates,
             nodeOutputs: newNodeOutputs,
+            branchResults: newBranchResults,
+            branchPaths: newBranchPaths,
             pendingApproval: clearApproval ? null : prev.pendingApproval,
           };
 
@@ -382,8 +439,12 @@ export function useSocket() {
       isRunning: false,
       executionId: null,
       submittedInput: null,
+      executionStartedAt: null,
       nodeStates: new Map(),
       nodeOutputs: new Map(),
+      nodeTypes: new Map(),
+      branchPaths: [],
+      branchResults: new Map(),
       finalResult: null,
       pendingApproval: null,
       validationErrors: null,

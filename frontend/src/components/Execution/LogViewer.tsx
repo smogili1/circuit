@@ -1,7 +1,26 @@
-import { useRef, useEffect, useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
-import { AgentEvent, NodeStatus } from '../../types/workflow';
+import { useRef, useEffect, useState, memo } from 'react';
+import {
+  ChevronDown,
+  ArrowDown,
+  ArrowUp,
+  Timer,
+  Clock,
+  Sparkles,
+  Code2,
+  GitBranch,
+  Merge,
+  ArrowRightCircle,
+  CheckCircle2,
+  Code,
+  UserCheck,
+  HelpCircle,
+  MessageSquare,
+  AlertCircle,
+  X,
+} from 'lucide-react';
+import { AgentEvent, NodeStatus, NodeType } from '../../types/workflow';
 import { EventItem, GroupedEvent } from './EventItem';
+import { StatusBadge, getStatusColors } from './StatusIndicator';
 
 interface NodeOutput {
   nodeId: string;
@@ -9,29 +28,31 @@ interface NodeOutput {
   events: AgentEvent[];
   result?: unknown;
   error?: string;
+  startedAt?: number;
+  completedAt?: number;
 }
 
 interface LogViewerProps {
   submittedInput: string | null;
   nodeOutputs: Map<string, NodeOutput>;
   nodeStates: Map<string, NodeStatus>;
+  nodeTypes?: Map<string, NodeType>;
   selectedNodeId: string | null;
   onNodeSelect: (nodeId: string | null) => void;
+  branchResults?: Map<string, boolean>;
 }
 
-const statusColors: Record<NodeStatus, { bg: string; text: string; border: string }> = {
-  pending: { bg: 'bg-gray-500/20', text: 'text-gray-400', border: 'border-gray-500/30' },
-  running: { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/30' },
-  complete: { bg: 'bg-green-500/20', text: 'text-green-400', border: 'border-green-500/30' },
-  error: { bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500/30' },
-  skipped: { bg: 'bg-gray-500/10', text: 'text-gray-500', border: 'border-gray-500/20' },
-  waiting: { bg: 'bg-purple-500/20', text: 'text-purple-400', border: 'border-purple-500/30' },
+const nodeTypeIcons: Record<string, typeof Sparkles> = {
+  'claude-agent': Sparkles,
+  'codex-agent': Code2,
+  condition: GitBranch,
+  merge: Merge,
+  input: ArrowRightCircle,
+  output: CheckCircle2,
+  javascript: Code,
+  approval: UserCheck,
 };
 
-/**
- * Groups tool-use events with their corresponding tool-result events.
- * Tool results are matched by their name (tool_use_id) to tool-use id, regardless of order.
- */
 function groupEvents(events: AgentEvent[]): GroupedEvent[] {
   const grouped: GroupedEvent[] = [];
   const toolUseIds = new Set<string>();
@@ -51,46 +72,56 @@ function groupEvents(events: AgentEvent[]): GroupedEvent[] {
       grouped.push({ event, result });
       continue;
     }
-
-    if (event.type === 'tool-result') {
-      if (toolUseIds.has(event.name)) {
-        continue;
-      }
+    if (event.type === 'tool-result' && toolUseIds.has(event.name)) {
+      continue;
     }
-
     grouped.push({ event });
   }
 
   return grouped;
 }
 
-export function LogViewer({
+function formatDuration(startedAt: number, completedAt?: number): string {
+  const end = completedAt || Date.now();
+  const ms = end - startedAt;
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
+}
+
+function formatTime(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
+function LogViewerComponent({
   submittedInput,
   nodeOutputs,
   nodeStates,
+  nodeTypes = new Map(),
   selectedNodeId,
   onNodeSelect,
+  branchResults = new Map(),
 }: LogViewerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
-  // Auto-expand running nodes
+  // Auto-expand running/waiting nodes
   useEffect(() => {
-    const runningNodes = Array.from(nodeStates.entries())
-      .filter(([_, status]) => status === 'running')
+    const activeNodes = Array.from(nodeStates.entries())
+      .filter(([_, status]) => status === 'running' || status === 'waiting')
       .map(([nodeId]) => nodeId);
 
-    if (runningNodes.length > 0) {
-      setExpandedNodes(prev => {
-        const next = new Set(prev);
-        runningNodes.forEach(id => next.add(id));
-        return next;
-      });
+    if (activeNodes.length > 0) {
+      setExpandedNodes((prev) => new Set([...prev, ...activeNodes]));
     }
   }, [nodeStates]);
 
-  // Auto-scroll to bottom
+  // Auto-scroll
   useEffect(() => {
     if (autoScroll && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -98,13 +129,9 @@ export function LogViewer({
   }, [nodeOutputs, autoScroll]);
 
   const toggleNode = (nodeId: string) => {
-    setExpandedNodes(prev => {
+    setExpandedNodes((prev) => {
       const next = new Set(prev);
-      if (next.has(nodeId)) {
-        next.delete(nodeId);
-      } else {
-        next.add(nodeId);
-      }
+      next.has(nodeId) ? next.delete(nodeId) : next.add(nodeId);
       return next;
     });
   };
@@ -112,146 +139,286 @@ export function LogViewer({
   const handleScroll = () => {
     if (scrollRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-      const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
-      setAutoScroll(isAtBottom);
+      setAutoScroll(scrollHeight - scrollTop - clientHeight < 50);
     }
   };
 
-  // Filter nodes if one is selected
   const displayNodes = selectedNodeId
     ? Array.from(nodeOutputs.entries()).filter(([id]) => id === selectedNodeId)
     : Array.from(nodeOutputs.entries());
 
+  // Count errors for banner
+  const errorCount = Array.from(nodeStates.values()).filter((s) => s === 'error').length;
+
   return (
     <div className="flex flex-col h-full bg-gray-950">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800">
-        <h3 className="text-sm font-medium text-gray-300">
-          Execution Logs
+      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 bg-gray-900/50">
+        <div className="flex items-center gap-3">
+          <h3 className="text-sm font-medium text-gray-300">Logs</h3>
           {selectedNodeId && (
             <button
               onClick={() => onNodeSelect(null)}
-              className="ml-2 text-xs text-blue-400 hover:text-blue-300"
+              className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 bg-blue-500/10 px-2 py-0.5 rounded"
             >
-              (Show All)
+              <X size={12} />
+              Clear filter
             </button>
           )}
-        </h3>
-        <button
-          onClick={() => setAutoScroll(!autoScroll)}
-          className={`text-xs px-2 py-1 rounded ${
-            autoScroll
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-          }`}
-        >
-          Auto-scroll {autoScroll ? 'ON' : 'OFF'}
-        </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex border border-gray-700 rounded overflow-hidden">
+            <button
+              onClick={() => setExpandedNodes(new Set(Array.from(nodeOutputs.keys())))}
+              className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800"
+              title="Expand all"
+            >
+              <ArrowDown size={14} />
+            </button>
+            <button
+              onClick={() => setExpandedNodes(new Set())}
+              className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 border-l border-gray-700"
+              title="Collapse all"
+            >
+              <ArrowUp size={14} />
+            </button>
+          </div>
+          <button
+            onClick={() => setAutoScroll(!autoScroll)}
+            className={`text-xs px-2 py-1 rounded transition-colors ${
+              autoScroll ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+            }`}
+          >
+            Auto-scroll
+          </button>
+        </div>
       </div>
 
-      {/* Log content */}
-      <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-4 space-y-4"
-      >
-        {/* Submitted Input Display */}
+      {/* Error Banner */}
+      {errorCount > 0 && !selectedNodeId && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-red-950/50 border-b border-red-500/30 text-red-400">
+          <AlertCircle size={16} />
+          <span className="text-sm font-medium">
+            {errorCount} node{errorCount !== 1 ? 's' : ''} failed
+          </span>
+        </div>
+      )}
+
+      {/* Content */}
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-3">
+        {/* User Input */}
         {submittedInput && !selectedNodeId && (
-          <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 p-4">
-            <div className="text-xs font-medium text-blue-400 mb-2">
-              User Input
+          <div className="rounded-lg border border-cyan-500/30 bg-cyan-950/20 p-4">
+            <div className="flex items-center gap-2 text-xs font-medium text-cyan-400 mb-2">
+              <MessageSquare size={14} />
+              Input
             </div>
-            <div className="text-sm text-gray-200 whitespace-pre-wrap">
-              {submittedInput}
-            </div>
+            <div className="text-sm text-gray-200 whitespace-pre-wrap">{submittedInput}</div>
           </div>
         )}
 
-        {displayNodes.length === 0 ? (
-          !submittedInput ? (
-            <div className="text-center text-gray-500 py-8">
-              <p>No execution logs yet.</p>
-              <p className="text-sm mt-1">Run the workflow to see logs here.</p>
-            </div>
-          ) : null
-        ) : (
-          displayNodes.map(([nodeId, output]) => {
-            const status = nodeStates.get(nodeId) || 'pending';
-            const colors = statusColors[status];
-            const isExpanded = expandedNodes.has(nodeId);
-            const nodeName = output.nodeName || nodeId.slice(0, 8);
+        {/* Empty State */}
+        {displayNodes.length === 0 && !submittedInput && (
+          <div className="text-center text-gray-500 py-16">
+            <Sparkles size={32} className="mx-auto mb-3 text-gray-600" />
+            <p className="font-medium">No logs yet</p>
+            <p className="text-sm mt-1 text-gray-600">Run the workflow to see execution logs</p>
+          </div>
+        )}
 
-            return (
-              <div
-                key={nodeId}
-                className={`rounded-lg border ${colors.border} overflow-hidden`}
+        {/* Node Cards */}
+        {displayNodes.map(([nodeId, output]) => {
+          const status = nodeStates.get(nodeId) || 'pending';
+          const nodeType = nodeTypes.get(nodeId);
+          const colors = getStatusColors(status);
+          const isExpanded = expandedNodes.has(nodeId);
+          const nodeName = output.nodeName || nodeId.slice(0, 8);
+          const Icon = nodeType ? nodeTypeIcons[nodeType] || HelpCircle : HelpCircle;
+          const branchResult = branchResults.get(nodeId);
+          const isRunning = status === 'running';
+          const isWaiting = status === 'waiting';
+          const isError = status === 'error';
+          const duration = output.startedAt ? formatDuration(output.startedAt, output.completedAt) : null;
+
+          // Status-based card styling
+          const cardBorder = isError
+            ? 'border-red-500/50'
+            : isRunning
+            ? 'border-blue-500/50'
+            : isWaiting
+            ? 'border-purple-500/50'
+            : colors.borderColor;
+
+          const cardShadow = isError
+            ? 'shadow-lg shadow-red-500/10'
+            : isRunning
+            ? 'shadow-lg shadow-blue-500/10'
+            : isWaiting
+            ? 'shadow-lg shadow-purple-500/10'
+            : '';
+
+          return (
+            <div
+              key={nodeId}
+              className={`rounded-lg border overflow-hidden transition-all ${cardBorder} ${cardShadow}`}
+            >
+              {/* Node Header */}
+              <button
+                onClick={() => toggleNode(nodeId)}
+                className={`w-full flex items-center justify-between px-4 py-3 ${colors.bgColor} hover:brightness-110 transition-all`}
               >
-                {/* Node Header */}
-                <button
-                  onClick={() => toggleNode(nodeId)}
-                  className={`w-full flex items-center justify-between px-4 py-3 ${colors.bg} hover:opacity-90 transition-opacity`}
-                >
-                  <div className="flex items-center gap-3">
-                    {isExpanded ? (
-                      <ChevronDown size={16} className={colors.text} />
-                    ) : (
-                      <ChevronRight size={16} className={colors.text} />
-                    )}
-                    <span className={`font-medium ${colors.text}`}>
-                      {nodeName}
-                    </span>
-                    {status === 'running' && (
-                      <span className="flex items-center gap-1 text-xs text-blue-400">
-                        <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-                        Running
+                <div className="flex items-center gap-3 min-w-0">
+                  <ChevronDown
+                    size={16}
+                    className={`${colors.color} transition-transform ${isExpanded ? '' : '-rotate-90'}`}
+                  />
+
+                  {/* Icon */}
+                  <div
+                    className={`flex items-center justify-center w-7 h-7 rounded-md ${
+                      isRunning
+                        ? 'bg-blue-500/30'
+                        : isWaiting
+                        ? 'bg-purple-500/30'
+                        : isError
+                        ? 'bg-red-500/30'
+                        : 'bg-gray-700/50'
+                    }`}
+                  >
+                    <Icon size={14} className={colors.color} />
+                  </div>
+
+                  {/* Name + Time */}
+                  <div className="flex flex-col items-start min-w-0">
+                    <span className={`font-medium truncate ${colors.color}`}>{nodeName}</span>
+                    {output.startedAt && (
+                      <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                        <Clock size={9} />
+                        {formatTime(output.startedAt)}
                       </span>
                     )}
                   </div>
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded ${colors.bg} ${colors.text}`}>
-                    {status}
-                  </span>
-                </button>
 
-                {/* Node Events */}
-                {isExpanded && (
-                  <div className="px-4 py-3 bg-gray-900/50 border-t border-gray-800">
-                    {output.events.length === 0 ? (
-                      status === 'complete' && output.result !== undefined ? (
-                        <pre className="text-xs text-gray-300 whitespace-pre-wrap overflow-x-auto font-mono">
+                  {/* Running/Waiting indicator */}
+                  {(isRunning || isWaiting) && (
+                    <span className="flex items-center gap-1.5 ml-2">
+                      <span className="relative flex h-2 w-2">
+                        <span
+                          className={`absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping ${
+                            isRunning ? 'bg-blue-400' : 'bg-purple-400'
+                          }`}
+                        />
+                        <span
+                          className={`relative inline-flex h-2 w-2 rounded-full ${
+                            isRunning ? 'bg-blue-500' : 'bg-purple-500'
+                          }`}
+                        />
+                      </span>
+                      <span className={`text-xs font-medium ${isRunning ? 'text-blue-400' : 'text-purple-400'}`}>
+                        {isRunning ? 'Running' : 'Waiting'}
+                      </span>
+                    </span>
+                  )}
+                </div>
+
+                {/* Right side */}
+                <div className="flex items-center gap-2">
+                  {/* Branch result */}
+                  {nodeType === 'condition' && branchResult !== undefined && (
+                    <span
+                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                        branchResult
+                          ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                          : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                      }`}
+                    >
+                      {branchResult ? 'TRUE' : 'FALSE'}
+                    </span>
+                  )}
+
+                  {/* Event count */}
+                  {output.events.length > 0 && (
+                    <span className="text-[10px] text-gray-500 bg-gray-800/80 px-1.5 py-0.5 rounded">
+                      {output.events.length}
+                    </span>
+                  )}
+
+                  {/* Duration */}
+                  {duration && (
+                    <span className="flex items-center gap-1 text-xs text-gray-500">
+                      <Timer size={11} />
+                      {duration}
+                    </span>
+                  )}
+
+                  <StatusBadge status={status} />
+                </div>
+              </button>
+
+              {/* Content */}
+              {isExpanded && (
+                <div className="px-4 py-3 bg-gray-900/70 border-t border-gray-800/50">
+                  {output.events.length === 0 ? (
+                    status === 'complete' && output.result !== undefined ? (
+                      <div className="rounded-md bg-green-950/30 border border-green-500/20 p-3">
+                        <div className="text-xs font-medium text-green-400 mb-2 flex items-center gap-1">
+                          <CheckCircle2 size={12} />
+                          Result
+                        </div>
+                        <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono">
                           {typeof output.result === 'string'
                             ? output.result
                             : JSON.stringify(output.result, null, 2)}
                         </pre>
-                      ) : (
-                        <p className="text-gray-500 text-sm">Waiting for output...</p>
-                      )
+                      </div>
+                    ) : isRunning || isWaiting ? (
+                      <p className="text-sm text-gray-400">
+                        {isWaiting ? 'Waiting for approval...' : 'Processing...'}
+                      </p>
                     ) : (
-                      <div className="space-y-1">
-                        {groupEvents(output.events).map((grouped, idx) => (
-                          <EventItem
-                            key={idx}
-                            event={grouped.event}
-                            result={grouped.result}
-                            index={idx}
-                          />
-                        ))}
-                      </div>
-                    )}
+                      <p className="text-sm text-gray-500">Waiting for output...</p>
+                    )
+                  ) : (
+                    <div className="space-y-1">
+                      {groupEvents(output.events).map((grouped, idx) => (
+                        <EventItem key={idx} event={grouped.event} result={grouped.result} index={idx} />
+                      ))}
+                    </div>
+                  )}
 
-                    {output.error && (
-                      <div className="mt-3 p-3 rounded-lg bg-red-900/30 border border-red-500/30">
-                        <p className="text-sm font-medium text-red-400">Error</p>
-                        <p className="text-xs text-red-300 mt-1">{output.error}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
+                  {/* Error */}
+                  {output.error && (
+                    <div className="mt-3 p-3 rounded-md bg-red-950/40 border border-red-500/30">
+                      <p className="text-sm font-medium text-red-400 flex items-center gap-1">
+                        <AlertCircle size={14} />
+                        Error
+                      </p>
+                      <p className="text-xs text-red-300 mt-1 font-mono">{output.error}</p>
+                    </div>
+                  )}
 
+                  {/* Final result */}
+                  {status === 'complete' && output.result !== undefined && output.events.length > 0 && (
+                    <div className="mt-3 p-3 rounded-md bg-green-950/30 border border-green-500/20">
+                      <div className="text-xs font-medium text-green-400 mb-2 flex items-center gap-1">
+                        <CheckCircle2 size={12} />
+                        Result
+                      </div>
+                      <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono max-h-40 overflow-y-auto">
+                        {typeof output.result === 'string'
+                          ? output.result
+                          : JSON.stringify(output.result, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
+
+export const LogViewer = memo(LogViewerComponent);

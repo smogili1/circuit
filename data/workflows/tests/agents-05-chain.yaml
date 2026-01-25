@@ -1,0 +1,165 @@
+id: agents-05-chain
+name: "Test: Cross-Agent Reference Chain"
+description: |
+  Tests: reference interpolation between Claude and Codex agents using {{NodeName.field}}
+  Input: "Use number 7"
+  Flow: Claude picks 7 -> Codex doubles to 14 -> Claude verifies 7*2=14
+  Expected: ClaudePicker.number=7, CodexDoubler.doubled=14, ClaudeVerifier.correct=true
+workingDirectory: /tmp/agent-tests
+nodes:
+  - id: input-1
+    type: input
+    position:
+      x: 100
+      y: 250
+    data:
+      type: input
+      name: Input
+      description: "Use number 7"
+
+  - id: claude-picker
+    type: claude-agent
+    position:
+      x: 350
+      y: 250
+    data:
+      type: claude-agent
+      name: ClaudePicker
+      userQuery: "{{Input.prompt}}. Extract the number and return it."
+      model: haiku
+      systemPrompt: "Extract numbers from input. Return only the number requested."
+      tools: []
+      maxTurns: 1
+      conversationMode: fresh
+      outputConfig:
+        format: json
+        schema: |-
+          {
+            "type": "object",
+            "properties": {
+              "number": { "type": "number", "description": "The extracted number" }
+            },
+            "required": ["number"]
+          }
+
+  - id: codex-doubler
+    type: codex-agent
+    position:
+      x: 600
+      y: 250
+    data:
+      type: codex-agent
+      name: CodexDoubler
+      userQuery: "Double this number: {{ClaudePicker.number}}. Return the doubled value."
+      model: gpt-5.2-codex
+      approvalPolicy: never
+      sandbox: read-only
+      baseInstructions: "You double numbers. Calculate and return the result."
+      mcpServers: []
+      conversationMode: fresh
+      outputConfig:
+        format: json
+        schema: |-
+          {
+            "type": "object",
+            "properties": {
+              "original": { "type": "number", "description": "The input number" },
+              "doubled": { "type": "number", "description": "The doubled result" }
+            },
+            "required": ["doubled"]
+          }
+      rejectionHandler:
+        enabled: false
+
+  - id: claude-verifier
+    type: claude-agent
+    position:
+      x: 850
+      y: 250
+    data:
+      type: claude-agent
+      name: ClaudeVerifier
+      userQuery: "Verify: is {{CodexDoubler.doubled}} equal to {{ClaudePicker.number}} times 2?"
+      model: haiku
+      systemPrompt: "Verify math calculations. Return whether the calculation is correct."
+      tools: []
+      maxTurns: 1
+      conversationMode: fresh
+      outputConfig:
+        format: json
+        schema: |-
+          {
+            "type": "object",
+            "properties": {
+              "original": { "type": "number" },
+              "doubled": { "type": "number" },
+              "correct": { "type": "boolean", "description": "Is the math correct?" }
+            },
+            "required": ["correct"]
+          }
+
+  - id: validator
+    type: javascript
+    position:
+      x: 1100
+      y: 250
+    data:
+      type: javascript
+      name: Validator
+      code: |
+        const picker = inputs.ClaudePicker;
+        const doubler = inputs.CodexDoubler;
+        const verifier = inputs.ClaudeVerifier;
+
+        const checks = {
+          pickerNumberIs7: picker.number === 7,
+          doublerResultIs14: doubler.doubled === 14,
+          verifierSaysCorrect: verifier.correct === true,
+          mathIsActuallyCorrect: picker.number * 2 === doubler.doubled
+        };
+
+        const passed = Object.values(checks).every(v => v === true);
+
+        return {
+          passed,
+          checks,
+          actual: {
+            pickerNumber: picker.number,
+            doublerResult: doubler.doubled,
+            verifierCorrect: verifier.correct
+          },
+          expected: {
+            pickerNumber: 7,
+            doublerResult: 14,
+            verifierCorrect: true
+          }
+        };
+
+  - id: output-1
+    type: output
+    position:
+      x: 1350
+      y: 250
+    data:
+      type: output
+      name: Output
+
+edges:
+  - id: edge-1
+    source: input-1
+    target: claude-picker
+  - id: edge-2
+    source: claude-picker
+    target: codex-doubler
+  - id: edge-3
+    source: codex-doubler
+    target: claude-verifier
+  - id: edge-4
+    source: claude-verifier
+    target: validator
+  - id: edge-5
+    source: validator
+    target: output-1
+
+createdAt: '2026-01-12T00:00:00.000Z'
+updatedAt: '2026-01-12T00:00:00.000Z'

@@ -1,0 +1,1197 @@
+id: circuit-developer-workflow
+name: Circuit Developer
+description: 'Multi-phase developer workflow with planning, implementation, testing loops, and human oversight'
+workingDirectory: /Users/path-to-project/circuit
+nodes:
+  - id: input-feature
+    type: input
+    position:
+      x: 400
+      'y': 50
+    data:
+      type: input
+      name: Feature Request
+      description: Describe the feature you want to implement
+  - id: planner
+    type: claude-agent
+    position:
+      x: 400
+      'y': 200
+    data:
+      type: claude-agent
+      name: Planner
+      model: opus
+      tools:
+        - Read
+        - Glob
+        - Grep
+        - Bash
+      systemPrompt: |
+        You are a senior software architect creating implementation plans.
+        Analyze the codebase thoroughly before creating your plan.
+        Consider existing patterns, dependencies, and architecture.
+        Be specific about files to create/modify and the approach for each.
+      userQuery: |
+        Analyze the codebase and create a comprehensive implementation plan for the following feature request:
+
+        {{Feature Request.prompt}}
+
+        Your plan must include:
+        1. A clear summary of the feature
+        2. Backend implementation plan (if backend changes needed, otherwise set to null)
+        3. Frontend implementation plan (if UI changes needed, otherwise set to null)
+        4. Interface definition (if backend changes, otherwise set to null)
+        5. Test strategy (unit tests for backend, E2E tests for frontend)
+
+        IMPORTANT: Set backendPlan to null if only frontend changes are needed.
+        Set frontendPlan to null if only backend changes are needed.
+      conversationMode: fresh
+      outputConfig:
+        format: json
+        schema: |
+          {
+            "type": "object",
+            "properties": {
+              "featureSummary": { "type": "string", "description": "Brief summary of the feature" },
+              "backendPlan": {
+                "type": ["object", "null"],
+                "properties": {
+                  "files": { "type": "array", "items": { "type": "string" }, "description": "Files to create or modify" },
+                  "approach": { "type": "string", "description": "Implementation approach" },
+                  "dependencies": { "type": "array", "items": { "type": "string" }, "description": "New dependencies needed" },
+                  "complexity": { "type": "string", "enum": ["low", "medium", "high"] }
+                },
+                "description": "Set to null if no backend changes needed"
+              },
+              "frontendPlan": {
+                "type": ["object", "null"],
+                "properties": {
+                  "components": { "type": "array", "items": { "type": "string" }, "description": "Components to create/modify" },
+                  "routes": { "type": "array", "items": { "type": "string" }, "description": "Routes to add/modify" },
+                  "stateManagement": { "type": "string", "description": "State management approach" }
+                },
+                "description": "Set to null if no frontend changes needed"
+              },
+              "backendInterface": {
+                "type": ["object", "null"],
+                "properties": {
+                  "exports": { "type": "array", "items": { "type": "string" }, "description": "Types/functions to expose" },
+                  "apiEndpoints": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "method": { "type": "string" },
+                        "path": { "type": "string" },
+                        "description": { "type": "string" }
+                      }
+                    }
+                  }
+                },
+                "description": "Set to null if no backend changes"
+              },
+              "testStrategy": {
+                "type": "object",
+                "properties": {
+                  "unitTests": { "type": "array", "items": { "type": "string" }, "description": "Backend areas to unit test" },
+                  "integrationTests": { "type": "array", "items": { "type": "string" }, "description": "Integration test scenarios" },
+                  "e2eTests": { "type": "array", "items": { "type": "string" }, "description": "E2E user flows to test" }
+                }
+              }
+            },
+            "required": ["featureSummary", "testStrategy"]
+          }
+  - id: plan-review
+    type: approval
+    position:
+      x: 400
+      'y': 450
+    data:
+      type: approval
+      name: Plan Review
+      promptMessage: >
+        Review the implementation plan below. Approve to proceed with implementation, or reject with feedback to revise
+        the plan.
+      feedbackPrompt: What changes should be made to the plan?
+      timeoutAction: reject
+      inputSelections:
+        - nodeId: planner
+          nodeName: Planner
+          fields:
+            - featureSummary
+            - backendPlan
+            - frontendPlan
+            - backendInterface
+            - testStrategy
+  - id: check-backend-needed
+    type: condition
+    position:
+      x: 400
+      'y': 550
+    data:
+      type: condition
+      name: Backend Needed?
+      conditions:
+        - inputReference: '{{Planner.backendPlan}}'
+          operator: is_not_empty
+  - id: backend-dev
+    type: codex-agent
+    position:
+      x: 400
+      'y': 750
+    data:
+      type: codex-agent
+      name: Backend Developer
+      model: gpt-5.2-codex
+      approvalPolicy: never
+      sandbox: workspace-write
+      userQuery: |
+        Implement the backend according to the approved plan.
+
+        ## Feature Summary
+        {{Planner.featureSummary}}
+
+        ## Backend Plan
+        Files to modify: {{Planner.backendPlan.files}}
+        Approach: {{Planner.backendPlan.approach}}
+        Dependencies: {{Planner.backendPlan.dependencies}}
+
+        ## Interface to Expose
+        Exports: {{Planner.backendInterface.exports}}
+        API Endpoints: {{Planner.backendInterface.apiEndpoints}}
+
+        After implementation, output the actual interface definition you created.
+      conversationMode: fresh
+      outputConfig:
+        format: json
+        schema: |
+          {
+            "type": "object",
+            "properties": {
+              "implementedFiles": { "type": "array", "items": { "type": "string" }, "description": "Files that were created or modified" },
+              "interfaceDefinition": {
+                "type": "object",
+                "properties": {
+                  "exports": { "type": "array", "items": { "type": "string" } },
+                  "types": { "type": "string", "description": "TypeScript type definitions" },
+                  "apiEndpoints": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "method": { "type": "string" },
+                        "path": { "type": "string" },
+                        "description": { "type": "string" }
+                      },
+                      "required": ["method", "path", "description"]
+                    }
+                  }
+                },
+                "required": ["exports", "types", "apiEndpoints"]
+              },
+              "notes": { "type": "string", "description": "Any implementation notes or deviations from plan" }
+            },
+            "required": ["implementedFiles", "interfaceDefinition", "notes"]
+          }
+  - id: test-designer
+    type: claude-agent
+    position:
+      x: 400
+      'y': 850
+    data:
+      type: claude-agent
+      name: Test Designer
+      model: sonnet
+      tools:
+        - Read
+        - Glob
+        - Grep
+      systemPrompt: |
+        You are a test engineer designing comprehensive test cases.
+        Focus on edge cases, error handling, and boundary conditions.
+        Make test cases specific and actionable.
+      userQuery: |
+        Design test cases for the backend implementation.
+
+        ## Feature Summary
+        {{Planner.featureSummary}}
+
+        ## Test Strategy from Plan
+        Unit Tests: {{Planner.testStrategy.unitTests}}
+        Integration Tests: {{Planner.testStrategy.integrationTests}}
+
+        ## Implemented Files
+        {{Backend Developer.implementedFiles}}
+
+        ## Interface Definition
+        {{Backend Developer.interfaceDefinition}}
+
+        Create detailed test cases that cover the implementation.
+      conversationMode: fresh
+      outputConfig:
+        format: json
+        schema: |
+          {
+            "type": "object",
+            "properties": {
+              "testCases": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "type": { "type": "string", "enum": ["unit", "integration"] },
+                    "file": { "type": "string", "description": "Target file to test" },
+                    "description": { "type": "string" },
+                    "setup": { "type": "string", "description": "Test setup required" },
+                    "assertions": { "type": "array", "items": { "type": "string" } }
+                  },
+                  "required": ["name", "type", "description", "assertions"]
+                }
+              },
+              "testFilePaths": { "type": "array", "items": { "type": "string" }, "description": "Suggested test file paths" }
+            },
+            "required": ["testCases", "testFilePaths"]
+          }
+  - id: test-writer
+    type: claude-agent
+    position:
+      x: 400
+      'y': 1050
+    data:
+      type: claude-agent
+      name: Test Writer
+      model: sonnet
+      tools:
+        - Read
+        - Write
+        - Edit
+        - Glob
+        - Grep
+        - Bash
+      systemPrompt: |
+        You are a test engineer writing high-quality tests.
+        Follow existing test patterns in the codebase.
+        Ensure tests are isolated and deterministic.
+      userQuery: |
+        Write the test files based on the designed test cases.
+
+        ## Test Cases
+        {{Test Designer.testCases}}
+
+        ## Suggested Test File Paths
+        {{Test Designer.testFilePaths}}
+
+        ## Implementation Files to Test
+        {{Backend Developer.implementedFiles}}
+
+        Write all the test files. Use the existing test framework and patterns from the codebase.
+      conversationMode: fresh
+      outputConfig:
+        format: json
+        schema: |
+          {
+            "type": "object",
+            "properties": {
+              "testFiles": { "type": "array", "items": { "type": "string" }, "description": "Test files created" },
+              "testCount": { "type": "number", "description": "Total number of tests written" }
+            },
+            "required": ["testFiles", "testCount"]
+          }
+  - id: init-backend-retry
+    type: javascript
+    position:
+      x: 400
+      'y': 1200
+    data:
+      type: javascript
+      name: Init Backend Retry
+      code: |
+        // Initialize retry counter for backend tests
+        return { retryCount: 0, maxRetries: 3 };
+  - id: run-backend-tests
+    type: bash
+    position:
+      x: 400
+      'y': 1350
+    data:
+      type: bash
+      name: Run Backend Tests
+      command: npm test -- --json 2>&1 || true
+      parseJson: false
+  - id: parse-test-results
+    type: javascript
+    position:
+      x: 400
+      'y': 1500
+    data:
+      type: javascript
+      name: Parse Test Results
+      code: >
+        const output = inputs['Run Backend Tests']?.result || '';
+
+
+        // Try to parse Jest JSON output
+
+        let passed = false;
+
+        let failedTests = [];
+
+        let totalTests = 0;
+
+        let passedCount = 0;
+
+        let failedCount = 0;
+
+
+        try {
+          // Look for Jest JSON results
+          const jsonMatch = output.match(/\{[\s\S]*"numTotalTests"[\s\S]*\}/);
+          if (jsonMatch) {
+            const jestResult = JSON.parse(jsonMatch[0]);
+            totalTests = jestResult.numTotalTests || 0;
+            passedCount = jestResult.numPassedTests || 0;
+            failedCount = jestResult.numFailedTests || 0;
+            passed = failedCount === 0 && totalTests > 0;
+
+            if (jestResult.testResults) {
+              for (const suite of jestResult.testResults) {
+                for (const test of (suite.assertionResults || [])) {
+                  if (test.status === 'failed') {
+                    failedTests.push({
+                      name: test.fullName || test.title,
+                      error: (test.failureMessages || []).join('\n')
+                    });
+                  }
+                }
+              }
+            }
+          } else {
+            // Fallback: check for common patterns
+            passed = output.includes('Tests:') && output.includes('passed') && !output.includes('failed');
+            if (output.includes('FAIL')) {
+              passed = false;
+            }
+          }
+        } catch (e) {
+          console.error('Failed to parse test results:', e.message);
+          passed = false;
+        }
+
+
+        const retryInfo = inputs['Init Backend Retry'] || inputs['Inc Backend Retry'] || inputs['Reset Backend Retry']
+        || { retryCount: 0, maxRetries: 3 };
+
+
+        return {
+          passed,
+          totalTests,
+          passedCount,
+          failedCount,
+          failedTests,
+          rawOutput: output.slice(0, 2000),
+          retryCount: retryInfo.retryCount,
+          maxRetries: retryInfo.maxRetries
+        };
+  - id: check-tests-passed
+    type: condition
+    position:
+      x: 400
+      'y': 1650
+    data:
+      type: condition
+      name: Tests Passed?
+      conditions:
+        - inputReference: '{{Parse Test Results.passed}}'
+          operator: equals
+          compareValue: 'true'
+  - id: check-backend-retry
+    type: condition
+    position:
+      x: 700
+      'y': 1650
+    data:
+      type: condition
+      name: Can Retry?
+      conditions:
+        - inputReference: '{{Parse Test Results.retryCount}}'
+          operator: less_than
+          compareValue: '3'
+  - id: inc-backend-retry
+    type: javascript
+    position:
+      x: 900
+      'y': 1500
+    data:
+      type: javascript
+      name: Inc Backend Retry
+      code: |
+        const prev = inputs['Parse Test Results'] || { retryCount: 0, maxRetries: 3 };
+        return {
+          retryCount: (prev.retryCount || 0) + 1,
+          maxRetries: prev.maxRetries || 3,
+          failedTests: prev.failedTests || [],
+          rawOutput: prev.rawOutput || ''
+        };
+  - id: test-fixer
+    type: claude-agent
+    position:
+      x: 900
+      'y': 1350
+    data:
+      type: claude-agent
+      name: Test Fixer
+      model: sonnet
+      tools:
+        - Read
+        - Write
+        - Edit
+        - Glob
+        - Grep
+        - Bash
+      systemPrompt: |
+        You are debugging failing tests. Analyze the failures carefully.
+        Determine if the issue is in the test or the implementation.
+        Make minimal, targeted fixes.
+      userQuery: |
+        The backend tests are failing. Please analyze and fix the issues.
+
+        ## Retry Attempt
+        {{Inc Backend Retry.retryCount}} of {{Inc Backend Retry.maxRetries}}
+
+        ## Failed Tests
+        {{Inc Backend Retry.failedTests}}
+
+        ## Test Output
+        {{Inc Backend Retry.rawOutput}}
+
+        ## Test Files
+        {{Test Writer.testFiles}}
+
+        ## Implementation Files
+        {{Backend Developer.implementedFiles}}
+
+        Analyze the failures and fix either the tests or the implementation as appropriate.
+      conversationMode: persist
+      outputConfig:
+        format: json
+        schema: |
+          {
+            "type": "object",
+            "properties": {
+              "fixedFiles": { "type": "array", "items": { "type": "string" } },
+              "fixDescription": { "type": "string" },
+              "fixType": { "type": "string", "enum": ["test", "implementation", "both"] }
+            },
+            "required": ["fixedFiles", "fixDescription", "fixType"]
+          }
+  - id: backend-manual-fix
+    type: approval
+    position:
+      x: 700
+      'y': 1850
+    data:
+      type: approval
+      name: Manual Fix Required
+      promptMessage: |
+        Backend tests have failed after 3 automated fix attempts.
+
+        Review the failures and either:
+        - Approve to continue with failing tests (not recommended)
+        - Reject with specific guidance for fixing the issues
+      feedbackPrompt: Provide specific guidance for fixing the test failures
+      timeoutAction: reject
+      inputSelections:
+        - nodeId: parse-test-results
+          nodeName: Parse Test Results
+          fields:
+            - failedTests
+            - rawOutput
+            - passedCount
+            - failedCount
+  - id: apply-backend-feedback
+    type: claude-agent
+    position:
+      x: 900
+      'y': 1850
+    data:
+      type: claude-agent
+      name: Apply Feedback
+      model: sonnet
+      tools:
+        - Read
+        - Write
+        - Edit
+        - Glob
+        - Grep
+        - Bash
+      systemPrompt: |
+        You are applying specific user feedback to fix test failures.
+        Follow the user's guidance carefully.
+      userQuery: |
+        The user has provided specific guidance for fixing the test failures:
+
+        ## User Feedback
+        {{Manual Fix Required.feedback}}
+
+        ## Current Failures
+        {{Parse Test Results.failedTests}}
+
+        ## Test Files
+        {{Test Writer.testFiles}}
+
+        ## Implementation Files
+        {{Backend Developer.implementedFiles}}
+
+        Apply the user's feedback to fix the issues.
+      conversationMode: fresh
+      outputConfig:
+        format: json
+        schema: |
+          {
+            "type": "object",
+            "properties": {
+              "fixedFiles": { "type": "array", "items": { "type": "string" } },
+              "changesSummary": { "type": "string" }
+            },
+            "required": ["fixedFiles", "changesSummary"]
+          }
+  - id: reset-backend-retry
+    type: javascript
+    position:
+      x: 900
+      'y': 2000
+    data:
+      type: javascript
+      name: Reset Backend Retry
+      code: |
+        // Reset retry counter after manual intervention
+        return { retryCount: 0, maxRetries: 3 };
+  - id: check-frontend-needed
+    type: condition
+    position:
+      x: 100
+      'y': 1850
+    data:
+      type: condition
+      name: Frontend Needed?
+      conditions:
+        - inputReference: '{{Planner.frontendPlan}}'
+          operator: is_not_empty
+  - id: check-frontend-only
+    type: condition
+    position:
+      x: 700
+      'y': 550
+    data:
+      type: condition
+      name: Frontend Only?
+      conditions:
+        - inputReference: '{{Planner.frontendPlan}}'
+          operator: is_not_empty
+  - id: ui-developer
+    type: claude-agent
+    position:
+      x: -200
+      'y': 2000
+    data:
+      type: claude-agent
+      name: UI Developer
+      model: sonnet
+      tools:
+        - Read
+        - Write
+        - Edit
+        - Glob
+        - Grep
+        - Bash
+      systemPrompt: |
+        You are a frontend developer implementing UI components.
+        Follow existing patterns and component structure in the codebase.
+        Ensure proper TypeScript types and accessibility.
+      userQuery: |
+        Implement the frontend based on the approved plan and backend interface.
+
+        ## Feature Summary
+        {{Planner.featureSummary}}
+
+        ## Frontend Plan
+        Components: {{Planner.frontendPlan.components}}
+        Routes: {{Planner.frontendPlan.routes}}
+        State Management: {{Planner.frontendPlan.stateManagement}}
+
+        ## Backend Interface
+        Exports: {{Backend Developer.interfaceDefinition.exports}}
+        Types: {{Backend Developer.interfaceDefinition.types}}
+        API Endpoints: {{Backend Developer.interfaceDefinition.apiEndpoints}}
+
+        Implement the UI components to integrate with the backend.
+      conversationMode: fresh
+      outputConfig:
+        format: json
+        schema: |
+          {
+            "type": "object",
+            "properties": {
+              "implementedComponents": { "type": "array", "items": { "type": "string" } },
+              "implementedRoutes": { "type": "array", "items": { "type": "string" } },
+              "stateChanges": { "type": "array", "items": { "type": "string" } },
+              "notes": { "type": "string" }
+            },
+            "required": ["implementedComponents"]
+          }
+  - id: ui-developer-standalone
+    type: claude-agent
+    position:
+      x: -500
+      'y': 2000
+    data:
+      type: claude-agent
+      name: UI Developer (Standalone)
+      model: sonnet
+      tools:
+        - Read
+        - Write
+        - Edit
+        - Glob
+        - Grep
+        - Bash
+      systemPrompt: |
+        You are a frontend developer implementing UI components.
+        Follow existing patterns and component structure in the codebase.
+        Ensure proper TypeScript types and accessibility.
+        This is a frontend-only change with no backend modifications.
+      userQuery: |
+        Implement the frontend based on the approved plan.
+
+        ## Feature Summary
+        {{Planner.featureSummary}}
+
+        ## Frontend Plan
+        Components: {{Planner.frontendPlan.components}}
+        Routes: {{Planner.frontendPlan.routes}}
+        State Management: {{Planner.frontendPlan.stateManagement}}
+
+        Implement the UI components. This is a frontend-only change.
+      conversationMode: fresh
+      outputConfig:
+        format: json
+        schema: |
+          {
+            "type": "object",
+            "properties": {
+              "implementedComponents": { "type": "array", "items": { "type": "string" } },
+              "implementedRoutes": { "type": "array", "items": { "type": "string" } },
+              "stateChanges": { "type": "array", "items": { "type": "string" } },
+              "notes": { "type": "string" }
+            },
+            "required": ["implementedComponents"]
+          }
+  - id: normalize-ui-output
+    type: javascript
+    position:
+      x: -350
+      'y': 2150
+    data:
+      type: javascript
+      name: Normalize UI Output
+      code: |
+        // Normalize UI Developer outputs from either source
+        const uiDev = inputs['UI Developer'] || {};
+        const uiStandalone = inputs['UI Developer (Standalone)'] || {};
+
+        // Use whichever has data
+        const source = uiDev.implementedComponents ? uiDev : uiStandalone;
+
+        return {
+          implementedComponents: source.implementedComponents || [],
+          implementedRoutes: source.implementedRoutes || [],
+          stateChanges: source.stateChanges || [],
+          notes: source.notes || '',
+          source: uiDev.implementedComponents ? 'with-backend' : 'standalone'
+        };
+  - id: check-has-frontend
+    type: condition
+    position:
+      x: -350
+      'y': 2300
+    data:
+      type: condition
+      name: Has Frontend?
+      conditions:
+        - inputReference: '{{Normalize UI Output.implementedComponents}}'
+          operator: is_not_empty
+  - id: e2e-test-designer
+    type: claude-agent
+    position:
+      x: -500
+      'y': 2350
+    data:
+      type: claude-agent
+      name: E2E Test Designer
+      model: sonnet
+      tools:
+        - Read
+        - Glob
+        - Grep
+      systemPrompt: |
+        You are designing E2E test scenarios using Playwright.
+        Focus on critical user flows and interaction patterns.
+        Consider both happy paths and error scenarios.
+      userQuery: |
+        Design E2E test scenarios for the implemented feature.
+
+        ## Feature Summary
+        {{Planner.featureSummary}}
+
+        ## E2E Test Strategy
+        {{Planner.testStrategy.e2eTests}}
+
+        ## Implemented UI Components
+        {{Normalize UI Output.implementedComponents}}
+
+        ## Implemented Routes
+        {{Normalize UI Output.implementedRoutes}}
+
+        Design Playwright test scenarios that cover the key user flows.
+      conversationMode: fresh
+      outputConfig:
+        format: json
+        schema: |
+          {
+            "type": "object",
+            "properties": {
+              "scenarios": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "description": { "type": "string" },
+                    "steps": { "type": "array", "items": { "type": "string" } },
+                    "assertions": { "type": "array", "items": { "type": "string" } },
+                    "url": { "type": "string" }
+                  },
+                  "required": ["name", "steps", "assertions"]
+                }
+              }
+            },
+            "required": ["scenarios"]
+          }
+  - id: init-e2e-retry
+    type: javascript
+    position:
+      x: -500
+      'y': 2500
+    data:
+      type: javascript
+      name: Init E2E Retry
+      code: |
+        return { retryCount: 0, maxRetries: 3 };
+  - id: e2e-tester
+    type: claude-agent
+    position:
+      x: -500
+      'y': 2650
+    data:
+      type: claude-agent
+      name: E2E Tester
+      model: sonnet
+      tools:
+        - Read
+        - Glob
+        - Grep
+        - Bash
+      mcpServers:
+        - name: playwright
+          command: npx
+          args:
+            - '-y'
+            - '@anthropic-ai/mcp-server-playwright'
+      systemPrompt: |
+        You are running E2E tests using Playwright via MCP.
+        Execute the test scenarios step by step.
+        Take screenshots for verification when needed.
+        Report any failures with details.
+      userQuery: |
+        Execute the E2E test scenarios using the Playwright MCP server.
+
+        ## Test Scenarios
+        {{E2E Test Designer.scenarios}}
+
+        ## Retry Attempt
+        This is attempt {{Init E2E Retry.retryCount}} of {{Init E2E Retry.maxRetries}}
+
+        Run each test scenario and report the results. Use the Playwright MCP tools to:
+        1. Navigate to the correct URL
+        2. Perform the interaction steps
+        3. Verify the assertions
+        4. Take screenshots for evidence
+
+        Report pass/fail for each scenario.
+      conversationMode: fresh
+      outputConfig:
+        format: json
+        schema: |
+          {
+            "type": "object",
+            "properties": {
+              "passed": { "type": "boolean" },
+              "results": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "scenario": { "type": "string" },
+                    "passed": { "type": "boolean" },
+                    "error": { "type": "string" },
+                    "screenshot": { "type": "string" }
+                  },
+                  "required": ["scenario", "passed"]
+                }
+              },
+              "summary": { "type": "string" }
+            },
+            "required": ["passed", "results"]
+          }
+  - id: check-e2e-passed
+    type: condition
+    position:
+      x: -500
+      'y': 2850
+    data:
+      type: condition
+      name: E2E Passed?
+      conditions:
+        - inputReference: '{{E2E Tester.passed}}'
+          operator: equals
+          compareValue: 'true'
+  - id: check-e2e-retry
+    type: condition
+    position:
+      x: -200
+      'y': 2850
+    data:
+      type: condition
+      name: Can Retry E2E?
+      conditions:
+        - inputReference: '{{Init E2E Retry.retryCount}}'
+          operator: less_than
+          compareValue: '3'
+  - id: inc-e2e-retry
+    type: javascript
+    position:
+      x: 0
+      'y': 2700
+    data:
+      type: javascript
+      name: Inc E2E Retry
+      code: |
+        const prev = inputs['E2E Tester'] || {};
+        const retryInfo = inputs['Init E2E Retry'] || { retryCount: 0, maxRetries: 3 };
+        return {
+          retryCount: (retryInfo.retryCount || 0) + 1,
+          maxRetries: retryInfo.maxRetries || 3,
+          failedScenarios: (prev.results || []).filter(r => !r.passed)
+        };
+  - id: e2e-fixer
+    type: claude-agent
+    position:
+      x: 0
+      'y': 2550
+    data:
+      type: claude-agent
+      name: E2E Fixer
+      model: sonnet
+      tools:
+        - Read
+        - Write
+        - Edit
+        - Glob
+        - Grep
+        - Bash
+      systemPrompt: |
+        You are fixing E2E test failures.
+        Analyze screenshots and error messages carefully.
+        The issue may be in the test expectations, UI implementation, or backend.
+      userQuery: |
+        E2E tests are failing. Please analyze and fix the issues.
+
+        ## Retry Attempt
+        {{Inc E2E Retry.retryCount}} of {{Inc E2E Retry.maxRetries}}
+
+        ## Failed Scenarios
+        {{Inc E2E Retry.failedScenarios}}
+
+        ## UI Components
+        {{Normalize UI Output.implementedComponents}}
+
+        ## Routes
+        {{Normalize UI Output.implementedRoutes}}
+
+        Analyze the failures and fix the implementation as needed.
+      conversationMode: persist
+      outputConfig:
+        format: json
+        schema: |
+          {
+            "type": "object",
+            "properties": {
+              "fixedFiles": { "type": "array", "items": { "type": "string" } },
+              "fixDescription": { "type": "string" }
+            },
+            "required": ["fixedFiles", "fixDescription"]
+          }
+  - id: e2e-manual-fix
+    type: approval
+    position:
+      x: -200
+      'y': 3050
+    data:
+      type: approval
+      name: E2E Manual Fix
+      promptMessage: |
+        E2E tests have failed after 3 automated fix attempts.
+
+        Review the failures and either:
+        - Approve to ship with known E2E issues (not recommended)
+        - Reject with specific guidance for fixing
+      feedbackPrompt: Provide specific guidance for fixing the E2E failures
+      timeoutAction: reject
+      inputSelections:
+        - nodeId: e2e-tester
+          nodeName: E2E Tester
+          fields:
+            - results
+            - summary
+  - id: apply-e2e-feedback
+    type: claude-agent
+    position:
+      x: 0
+      'y': 3050
+    data:
+      type: claude-agent
+      name: Apply E2E Feedback
+      model: sonnet
+      tools:
+        - Read
+        - Write
+        - Edit
+        - Glob
+        - Grep
+        - Bash
+      systemPrompt: |
+        You are applying user feedback to fix E2E test failures.
+        Follow the guidance carefully.
+      userQuery: |
+        Apply the user's feedback to fix E2E failures:
+
+        ## User Feedback
+        {{E2E Manual Fix.feedback}}
+
+        ## Failed Scenarios
+        {{E2E Tester.results}}
+
+        ## UI Components
+        {{Normalize UI Output.implementedComponents}}
+      conversationMode: fresh
+      outputConfig:
+        format: json
+        schema: |
+          {
+            "type": "object",
+            "properties": {
+              "fixedFiles": { "type": "array", "items": { "type": "string" } },
+              "changesSummary": { "type": "string" }
+            },
+            "required": ["fixedFiles", "changesSummary"]
+          }
+  - id: reset-e2e-retry
+    type: javascript
+    position:
+      x: 0
+      'y': 3200
+    data:
+      type: javascript
+      name: Reset E2E Retry
+      code: |
+        return { retryCount: 0, maxRetries: 3 };
+  - id: merge-results
+    type: merge
+    position:
+      x: -500
+      'y': 3100
+    data:
+      type: merge
+      name: Merge Results
+      mergeStrategy: combine
+  - id: output-final
+    type: output
+    position:
+      x: -500
+      'y': 3250
+    data:
+      type: output
+      name: Implementation Complete
+edges:
+  # Phase 1: Planning
+  - id: e-input-planner
+    source: input-feature
+    target: planner
+  - id: e-planner-review
+    source: planner
+    target: plan-review
+  - id: e-review-approved
+    source: plan-review
+    target: check-backend-needed
+    sourceHandle: approved
+  - id: e-review-rejected
+    source: plan-review
+    target: planner
+    sourceHandle: rejected
+  # Phase 2: Backend or Frontend-only routing
+  - id: e-backend-needed-yes
+    source: check-backend-needed
+    target: backend-dev
+    sourceHandle: 'true'
+  - id: e-backend-needed-no
+    source: check-backend-needed
+    target: check-frontend-only
+    sourceHandle: 'false'
+  - id: e-frontend-only-yes
+    source: check-frontend-only
+    target: ui-developer-standalone
+    sourceHandle: 'true'
+  - id: e-frontend-only-no
+    source: check-frontend-only
+    target: merge-results
+    sourceHandle: 'false'
+  - id: e-ui-standalone-normalize
+    source: ui-developer-standalone
+    target: normalize-ui-output
+  - id: e-backend-testdesign
+    source: backend-dev
+    target: test-designer
+  - id: e-testdesign-writer
+    source: test-designer
+    target: test-writer
+  - id: e-writer-initretry
+    source: test-writer
+    target: init-backend-retry
+  - id: e-initretry-runtests
+    source: init-backend-retry
+    target: run-backend-tests
+  - id: e-runtests-parse
+    source: run-backend-tests
+    target: parse-test-results
+  - id: e-parse-checkpassed
+    source: parse-test-results
+    target: check-tests-passed
+  - id: e-passed-frontend
+    source: check-tests-passed
+    target: check-frontend-needed
+    sourceHandle: 'true'
+  - id: e-failed-checkretry
+    source: check-tests-passed
+    target: check-backend-retry
+    sourceHandle: 'false'
+  - id: e-canretry-inc
+    source: check-backend-retry
+    target: inc-backend-retry
+    sourceHandle: 'true'
+  - id: e-inc-fixer
+    source: inc-backend-retry
+    target: test-fixer
+  - id: e-fixer-runtests
+    source: test-fixer
+    target: run-backend-tests
+  - id: e-noretry-manual
+    source: check-backend-retry
+    target: backend-manual-fix
+    sourceHandle: 'false'
+  - id: e-manual-approved
+    source: backend-manual-fix
+    target: check-frontend-needed
+    sourceHandle: approved
+  - id: e-manual-rejected
+    source: backend-manual-fix
+    target: apply-backend-feedback
+    sourceHandle: rejected
+  - id: e-feedback-reset
+    source: apply-backend-feedback
+    target: reset-backend-retry
+  - id: e-reset-runtests
+    source: reset-backend-retry
+    target: run-backend-tests
+  - id: e-frontend-ui
+    source: check-frontend-needed
+    target: ui-developer
+    sourceHandle: 'true'
+  - id: e-nofrontend-merge
+    source: check-frontend-needed
+    target: merge-results
+    sourceHandle: 'false'
+  - id: e-ui-normalize
+    source: ui-developer
+    target: normalize-ui-output
+  - id: e-normalize-hasfe
+    source: normalize-ui-output
+    target: check-has-frontend
+  - id: e-hasfe-e2edesign
+    source: check-has-frontend
+    target: e2e-test-designer
+    sourceHandle: 'true'
+  - id: e-nofe-merge
+    source: check-has-frontend
+    target: merge-results
+    sourceHandle: 'false'
+  - id: e-e2edesign-initretry
+    source: e2e-test-designer
+    target: init-e2e-retry
+  - id: e-e2einit-tester
+    source: init-e2e-retry
+    target: e2e-tester
+  - id: e-tester-checkpassed
+    source: e2e-tester
+    target: check-e2e-passed
+  - id: e-e2epassed-merge
+    source: check-e2e-passed
+    target: merge-results
+    sourceHandle: 'true'
+  - id: e-e2efailed-checkretry
+    source: check-e2e-passed
+    target: check-e2e-retry
+    sourceHandle: 'false'
+  - id: e-e2ecanretry-inc
+    source: check-e2e-retry
+    target: inc-e2e-retry
+    sourceHandle: 'true'
+  - id: e-e2einc-fixer
+    source: inc-e2e-retry
+    target: e2e-fixer
+  - id: e-e2efixer-tester
+    source: e2e-fixer
+    target: e2e-tester
+  - id: e-e2enoretry-manual
+    source: check-e2e-retry
+    target: e2e-manual-fix
+    sourceHandle: 'false'
+  - id: e-e2emanual-approved
+    source: e2e-manual-fix
+    target: merge-results
+    sourceHandle: approved
+  - id: e-e2emanual-rejected
+    source: e2e-manual-fix
+    target: apply-e2e-feedback
+    sourceHandle: rejected
+  - id: e-e2efeedback-reset
+    source: apply-e2e-feedback
+    target: reset-e2e-retry
+  - id: e-e2ereset-tester
+    source: reset-e2e-retry
+    target: e2e-tester
+  - id: e-merge-output
+    source: merge-results
+    target: output-final
+createdAt: '2026-01-24T22:00:00.000Z'
+updatedAt: '2026-01-24T21:50:13.346Z'

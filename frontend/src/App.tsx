@@ -453,8 +453,12 @@ export default function App() {
             isRunning={execution.isRunning}
             executionId={execution.executionId}
             submittedInput={execution.submittedInput}
+            executionStartedAt={execution.executionStartedAt}
             nodeStates={execution.nodeStates}
             nodeOutputs={execution.nodeOutputs}
+            nodeTypes={execution.nodeTypes}
+            branchPaths={execution.branchPaths}
+            branchResults={execution.branchResults}
             executionHistory={
               executionHistory?.workflowId === workflow?.id
                 ? executionHistory?.executions ?? []

@@ -1,0 +1,146 @@
+id: claude-04-transcript
+name: "Test: Claude Transcript Accumulation"
+description: |
+  Tests: transcript accumulates across multiple runs in a loop
+  Run 1: Say "ALPHA" -> transcript contains "ALPHA"
+  Run 2: Say "BETA" -> transcript contains "ALPHA" and "BETA"
+  Run 3: Say "GAMMA" -> transcript contains all three
+workingDirectory: /tmp/agent-tests
+nodes:
+  - id: input-1
+    type: input
+    position:
+      x: 100
+      y: 300
+    data:
+      type: input
+      name: Input
+      description: "Start sequence"
+
+  - id: loop-controller
+    type: javascript
+    position:
+      x: 300
+      y: 300
+    data:
+      type: javascript
+      name: LoopController
+      code: |
+        const runCount = inputs.SpeakAgent?.runCount || 0;
+        const words = ['ALPHA', 'BETA', 'GAMMA'];
+        const word = words[runCount] || 'DONE';
+
+        return {
+          prompt: `Say the word "${word}" and nothing else.`,
+          expectedWord: word,
+          iteration: runCount + 1
+        };
+
+  - id: claude-speak
+    type: claude-agent
+    position:
+      x: 550
+      y: 300
+    data:
+      type: claude-agent
+      name: SpeakAgent
+      userQuery: "{{LoopController.prompt}}"
+      model: haiku
+      systemPrompt: "You repeat words exactly as requested. Only output the requested word."
+      tools: []
+      maxTurns: 1
+      conversationMode: fresh
+      outputConfig:
+        format: json
+        schema: |-
+          {
+            "type": "object",
+            "properties": {
+              "word": { "type": "string", "description": "The word you said" }
+            },
+            "required": ["word"]
+          }
+
+  - id: condition-done
+    type: condition
+    position:
+      x: 800
+      y: 300
+    data:
+      type: condition
+      name: CheckDone
+      conditions:
+        - id: cond-1
+          inputReference: "{{SpeakAgent.runCount}}"
+          operator: greater_than_or_equals
+          compareValue: "3"
+
+  - id: validator
+    type: javascript
+    position:
+      x: 1050
+      y: 200
+    data:
+      type: javascript
+      name: Validator
+      code: |
+        const agent = inputs.SpeakAgent;
+        const transcript = agent.transcript || '';
+
+        const checks = {
+          runCountIs3: agent.runCount === 3,
+          transcriptHasALPHA: transcript.includes('ALPHA'),
+          transcriptHasBETA: transcript.includes('BETA'),
+          transcriptHasGAMMA: transcript.includes('GAMMA'),
+          transcriptAccumulated: transcript.length > 50
+        };
+
+        const passed = Object.values(checks).every(v => v === true);
+
+        return {
+          passed,
+          checks,
+          actual: {
+            runCount: agent.runCount,
+            transcriptLength: transcript.length,
+            transcriptPreview: transcript.substring(0, 200) + '...'
+          },
+          expected: {
+            runCount: 3,
+            transcriptContains: ['ALPHA', 'BETA', 'GAMMA']
+          }
+        };
+
+  - id: output-1
+    type: output
+    position:
+      x: 1300
+      y: 200
+    data:
+      type: output
+      name: Output
+
+edges:
+  - id: edge-1
+    source: input-1
+    target: loop-controller
+  - id: edge-2
+    source: loop-controller
+    target: claude-speak
+  - id: edge-3
+    source: claude-speak
+    target: condition-done
+  - id: edge-4
+    source: condition-done
+    target: validator
+    sourceHandle: 'true'
+  - id: edge-5
+    source: condition-done
+    target: loop-controller
+    sourceHandle: 'false'
+  - id: edge-6
+    source: validator
+    target: output-1
+
+createdAt: '2026-01-12T00:00:00.000Z'
+updatedAt: '2026-01-12T00:00:00.000Z'

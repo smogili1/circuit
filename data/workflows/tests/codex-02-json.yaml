@@ -1,0 +1,107 @@
+id: codex-02-json
+name: "Test: Codex JSON Output"
+description: |
+  Tests: JSON structured output with schema
+  Input: "Generate exactly: name=Python, year=1991, compiled=false"
+  Expected: { name: "Python", year: 1991, compiled: false }
+workingDirectory: /tmp/agent-tests
+nodes:
+  - id: input-1
+    type: input
+    position:
+      x: 100
+      y: 200
+    data:
+      type: input
+      name: Input
+      description: "Generate exactly: name=Python, year=1991, compiled=false"
+
+  - id: codex-lang
+    type: codex-agent
+    position:
+      x: 350
+      y: 200
+    data:
+      type: codex-agent
+      name: LangAgent
+      userQuery: "{{Input.prompt}}"
+      model: gpt-5.2-codex
+      approvalPolicy: never
+      sandbox: read-only
+      baseInstructions: "Output the exact values requested. Do not deviate."
+      mcpServers: []
+      conversationMode: fresh
+      outputConfig:
+        format: json
+        schema: |-
+          {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "year": { "type": "number" },
+              "compiled": { "type": "boolean" }
+            },
+            "required": ["name", "year", "compiled"]
+          }
+      rejectionHandler:
+        enabled: false
+
+  - id: validator
+    type: javascript
+    position:
+      x: 600
+      y: 200
+    data:
+      type: javascript
+      name: Validator
+      code: |
+        const agent = inputs.LangAgent;
+
+        const checks = {
+          nameIsString: typeof agent.name === 'string',
+          nameIsPython: agent.name === 'Python',
+          yearIsNumber: typeof agent.year === 'number',
+          yearIs1991: agent.year === 1991,
+          compiledIsBoolean: typeof agent.compiled === 'boolean',
+          compiledIsFalse: agent.compiled === false
+        };
+
+        const passed = Object.values(checks).every(v => v === true);
+
+        return {
+          passed,
+          checks,
+          actual: {
+            name: agent.name,
+            year: agent.year,
+            compiled: agent.compiled
+          },
+          expected: {
+            name: "Python",
+            year: 1991,
+            compiled: false
+          }
+        };
+
+  - id: output-1
+    type: output
+    position:
+      x: 850
+      y: 200
+    data:
+      type: output
+      name: Output
+
+edges:
+  - id: edge-1
+    source: input-1
+    target: codex-lang
+  - id: edge-2
+    source: codex-lang
+    target: validator
+  - id: edge-3
+    source: validator
+    target: output-1
+
+createdAt: '2026-01-12T00:00:00.000Z'
+updatedAt: '2026-01-12T00:00:00.000Z'

@@ -1,13 +1,15 @@
-import { useState } from 'react';
-import { Workflow, NodeStatus, AgentEvent, ExecutionSummary } from '../../types/workflow';
-import { ExecutionTimeline } from './ExecutionTimeline';
+import { useState, useMemo, memo } from 'react';
+import { Workflow, NodeStatus, NodeType, AgentEvent, ExecutionSummary } from '../../types/workflow';
+import { ExecutionWorkflowView } from './ExecutionWorkflowView';
 import { LogViewer } from './LogViewer';
 import { ExecutionControls } from './ExecutionControls';
 import { ExecutionHistory } from './ExecutionHistory';
+import { BranchPath } from './BranchIndicator';
 
 interface NodeOutput {
   nodeId: string;
   nodeName?: string;
+  nodeType?: NodeType;
   events: AgentEvent[];
   result?: unknown;
   error?: string;
@@ -20,8 +22,12 @@ interface FullScreenExecutionProps {
   isRunning: boolean;
   executionId: string | null;
   submittedInput: string | null;
+  executionStartedAt?: number | null;
   nodeStates: Map<string, NodeStatus>;
   nodeOutputs: Map<string, NodeOutput>;
+  nodeTypes?: Map<string, NodeType>;
+  branchPaths?: BranchPath[];
+  branchResults?: Map<string, boolean>;
   executionHistory: ExecutionSummary[];
   onStart: (workflowId: string, input: string) => void;
   onInterrupt: (executionId: string) => void;
@@ -30,13 +36,17 @@ interface FullScreenExecutionProps {
   onLoadHistory: (workflowId: string, executionId: string) => void;
 }
 
-export function FullScreenExecution({
+function FullScreenExecutionComponent({
   workflow,
   isRunning,
   executionId,
   submittedInput,
+  executionStartedAt,
   nodeStates,
   nodeOutputs,
+  nodeTypes = new Map(),
+  branchPaths = [],
+  branchResults = new Map(),
   executionHistory,
   onStart,
   onInterrupt,
@@ -46,6 +56,18 @@ export function FullScreenExecution({
 }: FullScreenExecutionProps) {
   const [input, setInput] = useState('');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  // Build node types map from workflow if not provided
+  const resolvedNodeTypes = useMemo(() => {
+    if (nodeTypes.size > 0) return nodeTypes;
+    if (!workflow) return new Map<string, NodeType>();
+
+    const types = new Map<string, NodeType>();
+    for (const node of workflow.nodes) {
+      types.set(node.id, node.type);
+    }
+    return types;
+  }, [workflow, nodeTypes]);
 
   const handleStart = () => {
     if (workflow && input.trim()) {
@@ -102,25 +124,32 @@ export function FullScreenExecution({
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Timeline */}
-        <ExecutionTimeline
-          nodes={workflow.nodes}
+        {/* Compact workflow diagram with status */}
+        <ExecutionWorkflowView
+          workflow={workflow}
           nodeStates={nodeStates}
           selectedNodeId={selectedNodeId}
           onNodeSelect={setSelectedNodeId}
+          branchPaths={branchPaths}
+          executionStartedAt={executionStartedAt ?? undefined}
+          isRunning={isRunning}
         />
 
-        {/* Log Viewer */}
+        {/* Log Viewer - takes most of the space */}
         <div className="flex-1 min-h-0">
           <LogViewer
             submittedInput={submittedInput}
             nodeOutputs={nodeOutputs}
             nodeStates={nodeStates}
+            nodeTypes={resolvedNodeTypes}
             selectedNodeId={selectedNodeId}
             onNodeSelect={setSelectedNodeId}
+            branchResults={branchResults}
           />
         </div>
       </div>
     </div>
   );
 }
+
+export const FullScreenExecution = memo(FullScreenExecutionComponent);

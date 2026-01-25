@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { CheckCircle2, XCircle, Clock, AlertCircle } from 'lucide-react';
 import { ApprovalRequest, ApprovalResponse } from '../../types/workflow';
+import { DataRenderer } from './DataRenderer';
 
 interface ApprovalModalProps {
   approval: ApprovalRequest;
@@ -68,21 +69,15 @@ export function ApprovalModal({ approval, onSubmit }: ApprovalModalProps) {
               <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">
                 Data to Review
               </h3>
-              <div className="max-h-64 overflow-y-auto space-y-2">
+              <div className="max-h-96 overflow-y-auto space-y-3">
                 {Object.entries(approval.displayData).map(([key, value]) => (
-                  <div
+                  <DataRenderer
                     key={key}
-                    className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3"
-                  >
-                    <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                      {key}
-                    </div>
-                    <pre className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap overflow-x-auto">
-                      {typeof value === 'string'
-                        ? value
-                        : JSON.stringify(value, null, 2)}
-                    </pre>
-                  </div>
+                    data={value}
+                    label={key}
+                    defaultExpanded={Object.keys(approval.displayData!).length === 1}
+                    maxPreviewLength={80}
+                  />
                 ))}
               </div>
             </div>

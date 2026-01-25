@@ -1,0 +1,149 @@
+id: codex-04-transcript
+name: "Test: Codex Transcript Accumulation"
+description: |
+  Tests: transcript accumulates across multiple runs in a loop
+  Run 1: Say "ONE" -> transcript contains "ONE"
+  Run 2: Say "TWO" -> transcript contains "ONE" and "TWO"
+  Run 3: Say "THREE" -> transcript contains all three
+workingDirectory: /tmp/agent-tests
+nodes:
+  - id: input-1
+    type: input
+    position:
+      x: 100
+      y: 300
+    data:
+      type: input
+      name: Input
+      description: "Start sequence"
+
+  - id: loop-controller
+    type: javascript
+    position:
+      x: 300
+      y: 300
+    data:
+      type: javascript
+      name: LoopController
+      code: |
+        const runCount = inputs.SpeakAgent?.runCount || 0;
+        const words = ['ONE', 'TWO', 'THREE'];
+        const word = words[runCount] || 'DONE';
+
+        return {
+          prompt: `Say the word "${word}" and nothing else.`,
+          expectedWord: word,
+          iteration: runCount + 1
+        };
+
+  - id: codex-speak
+    type: codex-agent
+    position:
+      x: 550
+      y: 300
+    data:
+      type: codex-agent
+      name: SpeakAgent
+      userQuery: "{{LoopController.prompt}}"
+      model: gpt-5.2-codex
+      approvalPolicy: never
+      sandbox: read-only
+      baseInstructions: "You repeat words exactly as requested. Only output the requested word."
+      mcpServers: []
+      conversationMode: fresh
+      outputConfig:
+        format: json
+        schema: |-
+          {
+            "type": "object",
+            "properties": {
+              "word": { "type": "string", "description": "The word you said" }
+            },
+            "required": ["word"]
+          }
+      rejectionHandler:
+        enabled: false
+
+  - id: condition-done
+    type: condition
+    position:
+      x: 800
+      y: 300
+    data:
+      type: condition
+      name: CheckDone
+      conditions:
+        - id: cond-1
+          inputReference: "{{SpeakAgent.runCount}}"
+          operator: greater_than_or_equals
+          compareValue: "3"
+
+  - id: validator
+    type: javascript
+    position:
+      x: 1050
+      y: 200
+    data:
+      type: javascript
+      name: Validator
+      code: |
+        const agent = inputs.SpeakAgent;
+        const transcript = agent.transcript || '';
+
+        const checks = {
+          runCountIs3: agent.runCount === 3,
+          transcriptHasONE: transcript.includes('ONE'),
+          transcriptHasTWO: transcript.includes('TWO'),
+          transcriptHasTHREE: transcript.includes('THREE'),
+          transcriptAccumulated: transcript.length > 50
+        };
+
+        const passed = Object.values(checks).every(v => v === true);
+
+        return {
+          passed,
+          checks,
+          actual: {
+            runCount: agent.runCount,
+            transcriptLength: transcript.length,
+            transcriptPreview: transcript.substring(0, 200) + '...'
+          },
+          expected: {
+            runCount: 3,
+            transcriptContains: ['ONE', 'TWO', 'THREE']
+          }
+        };
+
+  - id: output-1
+    type: output
+    position:
+      x: 1300
+      y: 200
+    data:
+      type: output
+      name: Output
+
+edges:
+  - id: edge-1
+    source: input-1
+    target: loop-controller
+  - id: edge-2
+    source: loop-controller
+    target: codex-speak
+  - id: edge-3
+    source: codex-speak
+    target: condition-done
+  - id: edge-4
+    source: condition-done
+    target: validator
+    sourceHandle: 'true'
+  - id: edge-5
+    source: condition-done
+    target: loop-controller
+    sourceHandle: 'false'
+  - id: edge-6
+    source: validator
+    target: output-1
+
+createdAt: '2026-01-12T00:00:00.000Z'
+updatedAt: '2026-01-12T00:00:00.000Z'
