@@ -1,5 +1,5 @@
 id: circuit-developer-workflow
-name: Circuit Developer
+name: Feature Developer Workflow
 description: 'Multi-phase developer workflow with planning, implementation, testing loops, and human oversight'
 workingDirectory: /Users/path-to-project/circuit
 nodes:

@@ -1,5 +1,5 @@
 id: eead093d-66f0-436f-aaca-512c09b9561a
-name: Dev Workflow
+name: Sample Workflow
 description: A simple example workflow with Claude and Codex agents
 workingDirectory: /path/to/project
 nodes:
