@@ -1,6 +1,6 @@
 import { useState, useMemo, memo } from 'react';
 import { Workflow, NodeStatus, NodeType, AgentEvent, ExecutionSummary } from '../../types/workflow';
-import { ExecutionTimeline } from './ExecutionTimeline';
+import { ExecutionWorkflowView } from './ExecutionWorkflowView';
 import { LogViewer } from './LogViewer';
 import { ExecutionControls } from './ExecutionControls';
 import { ExecutionHistory } from './ExecutionHistory';
@@ -124,11 +124,10 @@ function FullScreenExecutionComponent({
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Timeline with enhanced progress */}
-        <ExecutionTimeline
-          nodes={workflow.nodes}
+        {/* Compact workflow diagram with status */}
+        <ExecutionWorkflowView
+          workflow={workflow}
           nodeStates={nodeStates}
-          nodeOutputs={nodeOutputs}
           selectedNodeId={selectedNodeId}
           onNodeSelect={setSelectedNodeId}
           branchPaths={branchPaths}
@@ -136,7 +135,7 @@ function FullScreenExecutionComponent({
           isRunning={isRunning}
         />
 
-        {/* Log Viewer with enhanced status cards */}
+        {/* Log Viewer - takes most of the space */}
         <div className="flex-1 min-h-0">
           <LogViewer
             submittedInput={submittedInput}

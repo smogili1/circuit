@@ -1,5 +1,6 @@
 // Execution components
 export { FullScreenExecution } from './FullScreenExecution';
+export { ExecutionWorkflowView } from './ExecutionWorkflowView';
 export { ExecutionTimeline } from './ExecutionTimeline';
 export { ExecutionProgress, CompactProgress } from './ExecutionProgress';
 export { LogViewer } from './LogViewer';
