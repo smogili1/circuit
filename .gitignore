@@ -29,4 +29,4 @@ coverage/
 
 # User data (workflows, MCP configs, executions)
 data/executions
-
+data/workflows
