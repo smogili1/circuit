@@ -1,6 +1,12 @@
 import { promises as fs } from 'fs';
 import path from 'path';
-import { ExecutionEvent, NodeStatus, Workflow } from '../workflows/types.js';
+import {
+  CheckpointState,
+  ExecutionEvent,
+  NodeStatus,
+  Workflow,
+  WorkflowSnapshot,
+} from '../workflows/types.js';
 
 export type ExecutionStatus = 'running' | 'complete' | 'error' | 'interrupted';
 
@@ -32,6 +38,9 @@ export interface ExecutionSummary {
   workingDirectory?: string;
   outputDirectory?: string;
   nodes?: Record<string, ExecutionNodeSummary>;
+  workflowSnapshot?: WorkflowSnapshot;
+  sourceExecutionId?: string;
+  replayFromNodeId?: string;
 }
 
 // Directory for storing execution history (in top-level data/ folder)
@@ -56,6 +65,20 @@ function getSummaryPath(workflowId: string, executionId: string): string {
 
 function getEventsPath(workflowId: string, executionId: string): string {
   return path.join(getExecutionDir(workflowId, executionId), 'events.jsonl');
+}
+
+function getCheckpointPath(workflowId: string, executionId: string): string {
+  return path.join(getExecutionDir(workflowId, executionId), 'checkpoint.json');
+}
+
+export function buildWorkflowSnapshot(workflow: Workflow): WorkflowSnapshot {
+  return {
+    id: workflow.id,
+    name: workflow.name,
+    nodes: workflow.nodes,
+    edges: workflow.edges,
+    capturedAt: new Date().toISOString(),
+  };
 }
 
 async function writeJsonFile(filePath: string, data: unknown): Promise<void> {
@@ -90,6 +113,7 @@ export async function createExecutionSummary(
       '.workflow-outputs',
       executionId
     ),
+    workflowSnapshot: buildWorkflowSnapshot(workflow),
     nodes: {},
   };
 
@@ -167,6 +191,27 @@ export async function readExecutionEvents(
       .map((line) => JSON.parse(line) as ExecutionEventRecord);
   } catch {
     return [];
+  }
+}
+
+export async function saveExecutionCheckpoint(
+  workflowId: string,
+  executionId: string,
+  checkpoint: CheckpointState
+): Promise<void> {
+  await writeJsonFile(getCheckpointPath(workflowId, executionId), checkpoint);
+}
+
+export async function readExecutionCheckpoint(
+  workflowId: string,
+  executionId: string
+): Promise<CheckpointState | null> {
+  const checkpointPath = getCheckpointPath(workflowId, executionId);
+  try {
+    const content = await fs.readFile(checkpointPath, 'utf-8');
+    return JSON.parse(content) as CheckpointState;
+  } catch {
+    return null;
   }
 }
 

@@ -36,6 +36,7 @@ export interface BranchPath {
 interface ExecutionState {
   isRunning: boolean;
   executionId: string | null;
+  workflowId: string | null;
   submittedInput: string | null;
   executionStartedAt: number | null;
   nodeStates: Map<string, NodeStatus>;
@@ -58,27 +59,61 @@ interface SaveResult {
   error?: string;
 }
 
+const ACTIVE_EXECUTION_STORAGE_KEY = 'activeExecution';
+
+const buildEmptyExecutionState = (): ExecutionState => ({
+  isRunning: false,
+  executionId: null,
+  workflowId: null,
+  submittedInput: null,
+  executionStartedAt: null,
+  nodeStates: new Map(),
+  nodeOutputs: new Map(),
+  nodeTypes: new Map(),
+  branchPaths: [],
+  branchResults: new Map(),
+  finalResult: null,
+  pendingApproval: null,
+  validationErrors: null,
+});
+
 export function useSocket() {
   const [isConnected, setIsConnected] = useState(false);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [executionHistory, setExecutionHistory] = useState<ExecutionHistoryState | null>(null);
-  const [execution, setExecution] = useState<ExecutionState>({
-    isRunning: false,
-    executionId: null,
-    submittedInput: null,
-    executionStartedAt: null,
-    nodeStates: new Map(),
-    nodeOutputs: new Map(),
-    nodeTypes: new Map(),
-    branchPaths: [],
-    branchResults: new Map(),
-    finalResult: null,
-    pendingApproval: null,
-    validationErrors: null,
+  const [execution, setExecution] = useState<ExecutionState>(() => {
+    const base = buildEmptyExecutionState();
+    if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') {
+      return base;
+    }
+    try {
+      const savedRaw = sessionStorage.getItem(ACTIVE_EXECUTION_STORAGE_KEY);
+      if (!savedRaw) {
+        return base;
+      }
+      const saved = JSON.parse(savedRaw) as {
+        executionId?: string;
+        workflowId?: string;
+        submittedInput?: string | null;
+      };
+      if (!saved?.executionId) {
+        return base;
+      }
+      return {
+        ...base,
+        isRunning: true,
+        executionId: saved.executionId,
+        workflowId: saved.workflowId ?? null,
+        submittedInput: saved.submittedInput ?? null,
+      };
+    } catch {
+      return base;
+    }
   });
 
   const socketRef = useRef<Socket | null>(null);
+  const subscribedExecutionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Connect to same origin (unified server)
@@ -96,6 +131,7 @@ export function useSocket() {
     socket.on('disconnect', () => {
       console.log('Disconnected from server');
       setIsConnected(false);
+      subscribedExecutionIdRef.current = null;
     });
 
     socket.on('workflows', (data: Workflow[]) => {
@@ -213,8 +249,9 @@ export function useSocket() {
       }
 
       return {
-        isRunning: false,
+        isRunning: summary.status === 'running',
         executionId: summary.executionId,
+        workflowId: summary.workflowId,
         submittedInput: summary.input ?? null,
         executionStartedAt,
         nodeStates,
@@ -239,9 +276,11 @@ export function useSocket() {
 
       switch (event.type) {
         case 'execution-start':
+          subscribedExecutionIdRef.current = event.executionId;
           return {
             isRunning: true,
             executionId: event.executionId,
+            workflowId: event.workflowId ?? prev.workflowId,
             submittedInput: prev.submittedInput, // Preserve the submitted input
             executionStartedAt: Date.now(),
             nodeStates: new Map(),
@@ -366,6 +405,24 @@ export function useSocket() {
     });
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') {
+      return;
+    }
+    if (execution.isRunning && execution.executionId) {
+      sessionStorage.setItem(
+        ACTIVE_EXECUTION_STORAGE_KEY,
+        JSON.stringify({
+          executionId: execution.executionId,
+          workflowId: execution.workflowId,
+          submittedInput: execution.submittedInput,
+        })
+      );
+      return;
+    }
+    sessionStorage.removeItem(ACTIVE_EXECUTION_STORAGE_KEY);
+  }, [execution.isRunning, execution.executionId, execution.workflowId, execution.submittedInput]);
+
   const fetchExecutionHistory = useCallback(async (workflowId: string) => {
     try {
       const response = await fetch(
@@ -413,10 +470,32 @@ export function useSocket() {
     socketRef.current?.emit('save-workflow', workflow);
   }, []);
 
+  const subscribeToExecution = useCallback((executionId: string) => {
+    const event: ControlEvent = {
+      type: 'subscribe-execution',
+      executionId,
+    };
+    socketRef.current?.emit('control', event);
+  }, []);
+
+  useEffect(() => {
+    if (!isConnected) {
+      return;
+    }
+    if (!execution.isRunning || !execution.executionId) {
+      return;
+    }
+    if (subscribedExecutionIdRef.current === execution.executionId) {
+      return;
+    }
+    subscribeToExecution(execution.executionId);
+    subscribedExecutionIdRef.current = execution.executionId;
+  }, [execution.executionId, execution.isRunning, isConnected, subscribeToExecution]);
+
   const startExecution = useCallback((workflowId: string, input: string) => {
     console.log('[useSocket] Starting execution:', { workflowId, input: input.slice(0, 100) });
     // Track the submitted input immediately
-    setExecution(prev => ({ ...prev, submittedInput: input }));
+    setExecution(prev => ({ ...prev, submittedInput: input, workflowId }));
     const event: ControlEvent = {
       type: 'start-execution',
       workflowId,
@@ -435,20 +514,8 @@ export function useSocket() {
   }, []);
 
   const resetExecution = useCallback(() => {
-    setExecution({
-      isRunning: false,
-      executionId: null,
-      submittedInput: null,
-      executionStartedAt: null,
-      nodeStates: new Map(),
-      nodeOutputs: new Map(),
-      nodeTypes: new Map(),
-      branchPaths: [],
-      branchResults: new Map(),
-      finalResult: null,
-      pendingApproval: null,
-      validationErrors: null,
-    });
+    subscribedExecutionIdRef.current = null;
+    setExecution(buildEmptyExecutionState());
   }, []);
 
   const submitApproval = useCallback((nodeId: string, response: ApprovalResponse) => {
@@ -473,6 +540,7 @@ export function useSocket() {
     executionHistory,
     saveStatus,
     saveWorkflow,
+    subscribeToExecution,
     startExecution,
     interruptExecution,
     resetExecution,

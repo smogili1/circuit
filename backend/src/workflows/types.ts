@@ -163,6 +163,15 @@ export type ControlEvent =
   | { type: 'start-execution'; workflowId: string; input: string }
   | { type: 'interrupt'; executionId: string }
   | { type: 'resume'; executionId: string }
+  | { type: 'subscribe-execution'; executionId: string }
+  | {
+      type: 'replay-execution';
+      workflowId: string;
+      sourceExecutionId: string;
+      fromNodeId: string;
+      useOriginalInput?: boolean;
+      input?: string;
+    }
   | { type: 'submit-approval'; executionId: string; nodeId: string; response: ApprovalResponse };
 
 // =============================================================================
@@ -197,6 +206,81 @@ export interface AgentStructuredOutput {
   filePath: string;
   content: string;
   parsedJson?: unknown;
+}
+
+// =============================================================================
+// Replay Types
+// =============================================================================
+
+export interface WorkflowSnapshot {
+  id: string;
+  name?: string;
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  capturedAt: string;
+}
+
+export interface CheckpointNodeState {
+  status: NodeStatus;
+  error?: string;
+}
+
+export interface CheckpointState {
+  capturedAt: string;
+  nodeStates: Record<string, CheckpointNodeState>;
+  nodeOutputs: Record<string, unknown>;
+  variables: Record<string, unknown>;
+}
+
+export interface ReplayConfig {
+  sourceExecutionId: string;
+  fromNodeId: string;
+  useOriginalInput?: boolean;
+  input?: string;
+}
+
+export type ReplayWarningType =
+  | 'workflow-snapshot-missing'
+  | 'checkpoint-missing'
+  | 'node-removed'
+  | 'node-added'
+  | 'node-changed'
+  | 'edge-changed'
+  | 'inactive-branch'
+  | 'dependency-missing';
+
+export interface ReplayWarning {
+  type: ReplayWarningType;
+  message: string;
+  nodeId?: string;
+}
+
+export type ReplayErrorType =
+  | 'invalid-node'
+  | 'missing-checkpoint'
+  | 'dependency-missing'
+  | 'inactive-branch';
+
+export interface ReplayError {
+  type: ReplayErrorType;
+  message: string;
+  nodeId?: string;
+}
+
+export interface ReplayCheckpoint {
+  nodeId: string;
+  nodeName: string;
+  status: NodeStatus;
+  replayable: boolean;
+  reason?: string;
+}
+
+export interface ReplayInfo {
+  sourceExecutionId: string;
+  workflowId: string;
+  checkpoints: ReplayCheckpoint[];
+  warnings: ReplayWarning[];
+  errors: ReplayError[];
 }
 
 // =============================================================================

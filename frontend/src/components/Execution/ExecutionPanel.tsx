@@ -105,11 +105,12 @@ export function ExecutionPanel({
     }
   };
 
+  // Refresh history when workflow changes, execution completes, or a new execution starts
   useEffect(() => {
-    if (workflowId && !isRunning) {
+    if (workflowId) {
       onRefreshHistory(workflowId);
     }
-  }, [workflowId, isRunning, onRefreshHistory]);
+  }, [workflowId, isRunning, executionId, onRefreshHistory]);
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700">

@@ -22,8 +22,13 @@ import {
   readExecutionSummary,
   listExecutionSummaries,
   readExecutionEvents,
+  readExecutionCheckpoint,
+  saveExecutionCheckpoint,
+  updateExecutionSummary,
 } from './executions/storage.js';
+import type { ExecutionSummary } from './executions/storage.js';
 import { DAGExecutionEngine } from './orchestrator/engine.js';
+import { buildCheckpointState, buildReplayInfo, buildReplayPlan } from './orchestrator/replay.js';
 import { validateWorkflow } from './orchestrator/validation.js';
 import { ExecutionEvent, ControlEvent, Workflow, ApprovalResponse } from './workflows/types.js';
 import { loadAllSchemas, getSchema, getDefaultConfig } from './schemas/index.js';
@@ -45,8 +50,18 @@ app.use(express.json());
 // MCP Server Routes
 app.use('/api/mcp-servers', mcpRoutes);
 
-// Track active executions per socket
-const activeExecutions = new Map<string, DAGExecutionEngine>();
+interface ActiveExecution {
+  engine: DAGExecutionEngine;
+  workflowId: string;
+  subscribedSockets: Set<string>;
+  startedAt: Date;
+}
+
+// Map from executionId -> ActiveExecution
+const activeExecutions = new Map<string, ActiveExecution>();
+
+// Reverse mapping: socket.id -> Set<executionId>
+const socketSubscriptions = new Map<string, Set<string>>();
 
 // REST API Routes
 
@@ -205,6 +220,39 @@ app.get('/api/workflows/:id/executions/:executionId/events', async (req, res) =>
   res.json(events);
 });
 
+app.get('/api/workflows/:id/executions/:executionId/replay-info', async (req, res) => {
+  const workflow = getWorkflow(req.params.id);
+  if (!workflow) {
+    res.status(404).json({ error: 'Workflow not found' });
+    return;
+  }
+
+  const summary = await readExecutionSummary(req.params.id, req.params.executionId);
+  if (!summary) {
+    res.status(404).json({ error: 'Execution not found' });
+    return;
+  }
+
+  const checkpoint = await readExecutionCheckpoint(req.params.id, req.params.executionId);
+  const replayInfo = buildReplayInfo(
+    workflow,
+    req.params.executionId,
+    checkpoint,
+    summary.workflowSnapshot
+  );
+  res.json(replayInfo);
+});
+
+app.get('/api/executions/running', (_req, res) => {
+  const running = Array.from(activeExecutions.entries()).map(([executionId, exec]) => ({
+    executionId,
+    workflowId: exec.workflowId,
+    startedAt: exec.startedAt.toISOString(),
+    subscriberCount: exec.subscribedSockets.size,
+  }));
+  res.json(running);
+});
+
 // WebSocket Events
 io.on('connection', async (socket: Socket) => {
   console.log(`Client connected: ${socket.id}`);
@@ -249,6 +297,10 @@ io.on('connection', async (socket: Socket) => {
         await handleStartExecution(socket, event.workflowId, event.input);
         break;
 
+      case 'subscribe-execution':
+        await handleSubscribeExecution(socket, event.executionId);
+        break;
+
       case 'interrupt':
         await handleInterrupt(socket, event.executionId);
         break;
@@ -256,6 +308,17 @@ io.on('connection', async (socket: Socket) => {
       case 'resume':
         // TODO: Implement resume functionality
         console.log('Resume not yet implemented');
+        break;
+
+      case 'replay-execution':
+        await handleReplayExecution(
+          socket,
+          event.workflowId,
+          event.sourceExecutionId,
+          event.fromNodeId,
+          event.useOriginalInput,
+          event.input
+        );
         break;
 
       case 'submit-approval':
@@ -268,14 +331,20 @@ io.on('connection', async (socket: Socket) => {
   socket.on('disconnect', () => {
     console.log(`Client disconnected: ${socket.id}`);
 
-    // Clean up any active executions for this socket
-    const engine = activeExecutions.get(socket.id);
-    if (engine) {
-      // Cancel any pending approvals
-      cancelAllApprovals(engine.getContext().executionId);
-      engine.interrupt();
-      activeExecutions.delete(socket.id);
+    const subscriptions = socketSubscriptions.get(socket.id);
+    if (subscriptions) {
+      for (const executionId of subscriptions) {
+        const execution = activeExecutions.get(executionId);
+        if (execution) {
+          execution.subscribedSockets.delete(socket.id);
+          console.log(
+            `Removed socket ${socket.id} from execution ${executionId}. Remaining subscribers: ${execution.subscribedSockets.size}`
+          );
+        }
+      }
     }
+
+    socketSubscriptions.delete(socket.id);
   });
 });
 
@@ -294,13 +363,18 @@ async function handleStartExecution(
     return;
   }
 
-  // Check for existing execution
-  if (activeExecutions.has(socket.id)) {
-    socket.emit('event', {
-      type: 'execution-error',
-      error: 'An execution is already running',
-    } as ExecutionEvent);
-    return;
+  const subscriptions = socketSubscriptions.get(socket.id);
+  if (subscriptions) {
+    for (const execId of subscriptions) {
+      const execution = activeExecutions.get(execId);
+      if (execution && execution.workflowId === workflowId) {
+        socket.emit('event', {
+          type: 'execution-error',
+          error: 'An execution is already running for this workflow',
+        } as ExecutionEvent);
+        return;
+      }
+    }
   }
 
   // Validate workflow before execution
@@ -325,13 +399,28 @@ async function handleStartExecution(
     } as ExecutionEvent);
     return;
   }
-  activeExecutions.set(socket.id, engine);
+  activeExecutions.set(executionId, {
+    engine,
+    workflowId: workflow.id,
+    subscribedSockets: new Set([socket.id]),
+    startedAt: new Date(),
+  });
+
+  if (!socketSubscriptions.has(socket.id)) {
+    socketSubscriptions.set(socket.id, new Set());
+  }
+  socketSubscriptions.get(socket.id)!.add(executionId);
 
   let eventWriteChain = Promise.resolve();
 
-  // Forward all events to the client
+  // Forward all events to subscribed clients
   engine.on('event', (event: ExecutionEvent) => {
-    socket.emit('event', event);
+    const execution = activeExecutions.get(executionId);
+    if (execution) {
+      for (const socketId of execution.subscribedSockets) {
+        io.to(socketId).emit('event', event);
+      }
+    }
     const record = { timestamp: new Date().toISOString(), event };
     eventWriteChain = eventWriteChain
       .then(async () => {
@@ -361,14 +450,46 @@ async function handleStartExecution(
     await engine.execute(input);
   } finally {
     await eventWriteChain;
-    activeExecutions.delete(socket.id);
+    activeExecutions.delete(executionId);
+    for (const [socketId, socketExecutionIds] of socketSubscriptions.entries()) {
+      socketExecutionIds.delete(executionId);
+      if (socketExecutionIds.size === 0) {
+        socketSubscriptions.delete(socketId);
+      }
+    }
+  }
+}
+
+async function handleSubscribeExecution(socket: Socket, executionId: string): Promise<void> {
+  const execution = activeExecutions.get(executionId);
+
+  if (!execution) {
+    socket.emit('event', {
+      type: 'execution-error',
+      error: 'No running execution found with this ID',
+    } as ExecutionEvent);
+    return;
+  }
+
+  execution.subscribedSockets.add(socket.id);
+
+  if (!socketSubscriptions.has(socket.id)) {
+    socketSubscriptions.set(socket.id, new Set());
+  }
+  socketSubscriptions.get(socket.id)!.add(executionId);
+
+  console.log(`Socket ${socket.id} subscribed to execution ${executionId}`);
+
+  const events = await readExecutionEvents(execution.workflowId, executionId);
+  for (const record of events) {
+    socket.emit('event', record.event);
   }
 }
 
 async function handleInterrupt(socket: Socket, executionId: string): Promise<void> {
-  const engine = activeExecutions.get(socket.id);
+  const execution = activeExecutions.get(executionId);
 
-  if (!engine) {
+  if (!execution) {
     socket.emit('event', {
       type: 'execution-error',
       error: 'No active execution to interrupt',
@@ -376,10 +497,10 @@ async function handleInterrupt(socket: Socket, executionId: string): Promise<voi
     return;
   }
 
-  if (engine.getContext().executionId !== executionId) {
+  if (!execution.subscribedSockets.has(socket.id)) {
     socket.emit('event', {
       type: 'execution-error',
-      error: 'Execution ID mismatch',
+      error: 'Not authorized to interrupt this execution',
     } as ExecutionEvent);
     return;
   }
@@ -387,7 +508,7 @@ async function handleInterrupt(socket: Socket, executionId: string): Promise<voi
   // Cancel any pending approvals for this execution
   cancelAllApprovals(executionId);
 
-  await engine.interrupt();
+  await execution.engine.interrupt();
 }
 
 function handleSubmitApproval(
@@ -396,9 +517,9 @@ function handleSubmitApproval(
   nodeId: string,
   response: ApprovalResponse
 ): void {
-  const engine = activeExecutions.get(socket.id);
+  const execution = activeExecutions.get(executionId);
 
-  if (!engine) {
+  if (!execution) {
     socket.emit('event', {
       type: 'execution-error',
       error: 'No active execution found',
@@ -406,10 +527,10 @@ function handleSubmitApproval(
     return;
   }
 
-  if (engine.getContext().executionId !== executionId) {
+  if (!execution.subscribedSockets.has(socket.id)) {
     socket.emit('event', {
       type: 'execution-error',
-      error: 'Execution ID mismatch',
+      error: 'Not authorized for this execution',
     } as ExecutionEvent);
     return;
   }

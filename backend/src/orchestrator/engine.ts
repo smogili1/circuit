@@ -9,6 +9,7 @@ import {
   AgentStructuredOutput,
   ExecutionContext,
   requiresJsonInput,
+  CheckpointState,
 } from '../workflows/types.js';
 import { BaseAgent } from '../agents/base.js';
 import {
@@ -21,6 +22,7 @@ import {
 import { interpolateReferences, buildNodeNameMap, parseReference, resolveReference } from './references.js';
 import { executorRegistry, ExecutorContext, ExecutorEmitter } from './executors/index.js';
 import { ExecutionError, ErrorCodes } from './errors.js';
+import { filterReplayVariables } from './replay.js';
 
 /**
  * DAG-based workflow execution engine.
@@ -88,84 +90,94 @@ export class DAGExecutionEngine extends EventEmitter {
       workflowId: this.workflow.id,
     } as ExecutionEvent);
 
-    try {
-      // Execute input nodes first (they don't use the registry pattern)
-      const inputNodes = this.workflow.nodes.filter((n) => n.type === 'input');
-      for (const node of inputNodes) {
+    // Execute input nodes first (they don't use the registry pattern)
+    const inputNodes = this.workflow.nodes.filter((n) => n.type === 'input');
+    for (const node of inputNodes) {
+      setNodeOutput(this.context, node.id, input);
+      this.updateNodeState(node.id, 'complete', input);
+    }
+
+    await this.runExecution();
+  }
+
+  /**
+   * Execute the workflow starting from a checkpoint state.
+   */
+  async executeFromCheckpoint(
+    input: string,
+    checkpoint: CheckpointState,
+    replayNodeIds: Set<string>,
+    inactiveNodeIds: Set<string> = new Set()
+  ): Promise<void> {
+    console.log(`[Engine] Replaying workflow execution: ${this.workflow.id}`);
+    console.log(`[Engine] Replay input: ${input.slice(0, 200)}`);
+    this.aborted = false;
+    this.workflowInput = input;
+    this.structuredOutputs.clear();
+
+    const filteredVariables = filterReplayVariables(
+      checkpoint.variables || {},
+      replayNodeIds
+    );
+
+    this.context.nodeOutputs = new Map(Object.entries(checkpoint.nodeOutputs || {}));
+    this.context.variables = new Map(Object.entries(filteredVariables));
+
+    // Reset node states to pending, then apply checkpoint and replay setup.
+    this.nodeStates.clear();
+    for (const node of this.workflow.nodes) {
+      this.nodeStates.set(node.id, { status: 'pending' });
+    }
+
+    for (const node of this.workflow.nodes) {
+      if (node.type === 'input') {
         setNodeOutput(this.context, node.id, input);
         this.updateNodeState(node.id, 'complete', input);
+        continue;
       }
 
-      // Execute remaining nodes in topological order
-      while (!this.aborted) {
-        const readyNodes = this.getReadyNodes();
-
-        if (readyNodes.length === 0) {
-          // Check if all nodes are complete or if we're stuck
-          const allComplete = Array.from(this.nodeStates.values()).every(
-            (state) =>
-              state.status === 'complete' ||
-              state.status === 'error' ||
-              state.status === 'skipped'
-          );
-
-          if (allComplete) {
-            break;
-          }
-
-          // Check if any nodes are still running (e.g., waiting for approval)
-          const hasRunning = Array.from(this.nodeStates.values()).some(
-            (state) => state.status === 'running'
-          );
-
-          if (hasRunning) {
-            // Wait a bit and check again - running nodes will eventually complete
-            await new Promise((resolve) => setTimeout(resolve, 100));
-            continue;
-          }
-
-          // If there are pending nodes but none ready, we might have a cycle
-          const hasPending = Array.from(this.nodeStates.values()).some(
-            (state) => state.status === 'pending'
-          );
-
-          if (hasPending) {
-            throw new ExecutionError({
-              code: ErrorCodes.CYCLE_DETECTED,
-              message: 'Workflow has a cycle or unsatisfied dependencies',
-              recoverable: false,
-            });
-          }
-
-          break;
-        }
-
-        // Execute all ready nodes in parallel
-        await Promise.all(readyNodes.map((node) => this.executeNode(node)));
+      if (replayNodeIds.has(node.id)) {
+        this.nodeStates.set(node.id, { status: 'pending' });
+        this.context.nodeOutputs.delete(node.id);
+        continue;
       }
 
-      // Collect final output
-      const outputNodes = this.workflow.nodes.filter((n) => n.type === 'output');
-      const results: Record<string, unknown> = {};
-
-      for (const node of outputNodes) {
-        const state = this.nodeStates.get(node.id);
-        if (state?.output !== undefined) {
-          results[node.id] = state.output;
-        }
+      const checkpointState = checkpoint.nodeStates[node.id];
+      if (checkpointState?.status === 'complete') {
+        const output = this.context.nodeOutputs.get(node.id);
+        this.updateNodeState(node.id, 'complete', output);
+        continue;
       }
 
-      this.emit('event', {
-        type: 'execution-complete',
-        result: results,
-      } as ExecutionEvent);
-    } catch (error) {
-      const execError = ExecutionError.from(error);
-      this.emit('event', {
-        type: 'execution-error',
-        error: execError.message,
-      } as ExecutionEvent);
+      if (checkpointState?.status === 'skipped' || inactiveNodeIds.has(node.id)) {
+        this.updateNodeState(node.id, 'skipped');
+        this.context.nodeOutputs.delete(node.id);
+        continue;
+      }
+
+      this.updateNodeState(node.id, 'skipped');
+      this.context.nodeOutputs.delete(node.id);
     }
+
+    this.emit('event', {
+      type: 'execution-start',
+      executionId: this.context.executionId,
+      workflowId: this.workflow.id,
+    } as ExecutionEvent);
+
+    for (const node of this.workflow.nodes) {
+      if (node.type === 'input' || replayNodeIds.has(node.id)) continue;
+      const state = this.nodeStates.get(node.id);
+      if (state?.status === 'complete' || state?.status === 'skipped') {
+        this.emit('event', {
+          type: 'node-complete',
+          nodeId: node.id,
+          result: state.output ?? null,
+        } as ExecutionEvent);
+      }
+    }
+
+    await this.runExecution();
   }
 
   /**
@@ -200,6 +212,13 @@ export class DAGExecutionEngine extends EventEmitter {
    */
   getNodeState(nodeId: string): NodeState | undefined {
     return this.nodeStates.get(nodeId);
+  }
+
+  /**
+   * Get all node states.
+   */
+  getNodeStates(): Map<string, NodeState> {
+    return new Map(this.nodeStates);
   }
 
   /**
@@ -776,5 +795,82 @@ export class DAGExecutionEngine extends EventEmitter {
     }
 
     this.nodeStates.set(nodeId, updated);
+  }
+
+  /**
+   * Run the execution loop once node states are initialized.
+   */
+  private async runExecution(): Promise<void> {
+    try {
+      // Execute remaining nodes in topological order
+      while (!this.aborted) {
+        const readyNodes = this.getReadyNodes();
+
+        if (readyNodes.length === 0) {
+          // Check if all nodes are complete or if we're stuck
+          const allComplete = Array.from(this.nodeStates.values()).every(
+            (state) =>
+              state.status === 'complete' ||
+              state.status === 'error' ||
+              state.status === 'skipped'
+          );
+
+          if (allComplete) {
+            break;
+          }
+
+          // Check if any nodes are still running (e.g., waiting for approval)
+          const hasRunning = Array.from(this.nodeStates.values()).some(
+            (state) => state.status === 'running'
+          );
+
+          if (hasRunning) {
+            // Wait a bit and check again - running nodes will eventually complete
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            continue;
+          }
+
+          // If there are pending nodes but none ready, we might have a cycle
+          const hasPending = Array.from(this.nodeStates.values()).some(
+            (state) => state.status === 'pending'
+          );
+
+          if (hasPending) {
+            throw new ExecutionError({
+              code: ErrorCodes.CYCLE_DETECTED,
+              message: 'Workflow has a cycle or unsatisfied dependencies',
+              recoverable: false,
+            });
+          }
+
+          break;
+        }
+
+        // Execute all ready nodes in parallel
+        await Promise.all(readyNodes.map((node) => this.executeNode(node)));
+      }
+
+      // Collect final output
+      const outputNodes = this.workflow.nodes.filter((n) => n.type === 'output');
+      const results: Record<string, unknown> = {};
+
+      for (const node of outputNodes) {
+        const state = this.nodeStates.get(node.id);
+        if (state?.output !== undefined) {
+          results[node.id] = state.output;
+        }
+      }
+
+      this.emit('event', {
+        type: 'execution-complete',
+        result: results,
+      } as ExecutionEvent);
+    } catch (error) {
+      const execError = ExecutionError.from(error);
+      this.emit('event', {
+        type: 'execution-error',
+        error: execError.message,
+      } as ExecutionEvent);
+    }
   }
 }
