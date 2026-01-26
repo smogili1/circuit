@@ -29,6 +29,9 @@ describe('useSocket', () => {
       disconnect: vi.fn(),
     };
     (io as ReturnType<typeof vi.fn>).mockReturnValue(mockSocket);
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.clear();
+    }
   });
 
   afterEach(() => {

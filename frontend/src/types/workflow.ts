@@ -292,6 +292,7 @@ export type ControlEvent =
   | { type: 'start-execution'; workflowId: string; input: string }
   | { type: 'interrupt'; executionId: string }
   | { type: 'resume'; executionId: string }
+  | { type: 'subscribe-execution'; executionId: string }
   | { type: 'submit-approval'; executionId: string; nodeId: string; response: ApprovalResponse };
 
 // =============================================================================
