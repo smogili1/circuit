@@ -91,6 +91,63 @@ async function writeJsonFile(filePath: string, data: unknown): Promise<void> {
 
 export async function initializeExecutionStorage(): Promise<void> {
   await ensureExecutionsDir();
+  await markOrphanedExecutions();
+}
+
+/**
+ * Mark any executions that were left in 'running' status as 'interrupted'.
+ * This handles the case where the server crashed or was terminated while
+ * executions were in progress.
+ */
+async function markOrphanedExecutions(): Promise<void> {
+  try {
+    const entries = await fs.readdir(EXECUTIONS_DIR, { withFileTypes: true });
+    let orphanedCount = 0;
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const workflowId = entry.name;
+      const summaries = await listExecutionSummaries(workflowId);
+
+      for (const summary of summaries) {
+        if (summary.status === 'running') {
+          // Mark execution as interrupted
+          const updatedNodes = { ...summary.nodes };
+          for (const [nodeId, node] of Object.entries(updatedNodes)) {
+            if (node.status === 'running') {
+              updatedNodes[nodeId] = {
+                ...node,
+                status: 'error',
+                completedAt: new Date().toISOString(),
+                error: 'Server terminated while node was running',
+              };
+            }
+          }
+
+          await updateExecutionSummary(workflowId, summary.executionId, {
+            status: 'interrupted',
+            completedAt: new Date().toISOString(),
+            error: 'Server terminated while execution was in progress',
+            nodes: updatedNodes,
+          });
+
+          orphanedCount++;
+          console.log(
+            `[ExecutionStorage] Marked orphaned execution: ${summary.executionId} (workflow: ${workflowId})`
+          );
+        }
+      }
+    }
+
+    if (orphanedCount > 0) {
+      console.log(`[ExecutionStorage] Marked ${orphanedCount} orphaned execution(s) as interrupted`);
+    }
+  } catch (error) {
+    // Directory might not exist yet, that's fine
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.error('[ExecutionStorage] Error marking orphaned executions:', error);
+    }
+  }
 }
 
 export async function createExecutionSummary(
