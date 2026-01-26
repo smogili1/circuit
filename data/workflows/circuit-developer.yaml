@@ -1,7 +1,7 @@
 id: circuit-developer-workflow
 name: Circuit Developer
 description: 'Multi-phase developer workflow with planning, implementation, testing loops, and human oversight'
-workingDirectory: /Users/path-to-project/circuit
+workingDirectory: /Users/shiva/circuit
 nodes:
   - id: input-feature
     type: input
@@ -317,8 +317,9 @@ nodes:
     data:
       type: bash
       name: Run Backend Tests
-      command: npm test -- --json 2>&1 || true
+      script: CI=true npm test -- --json 2>&1 || true
       parseJson: false
+      timeout: 120000
   - id: parse-test-results
     type: javascript
     position:
@@ -488,8 +489,8 @@ nodes:
   - id: backend-manual-fix
     type: approval
     position:
-      x: 700
-      'y': 1850
+      x: 525
+      'y': 1845
     data:
       type: approval
       name: Manual Fix Required
@@ -570,8 +571,8 @@ nodes:
   - id: check-frontend-needed
     type: condition
     position:
-      x: 100
-      'y': 1850
+      x: 225
+      'y': 1845
     data:
       type: condition
       name: Frontend Needed?
@@ -592,8 +593,8 @@ nodes:
   - id: ui-developer
     type: claude-agent
     position:
-      x: -200
-      'y': 2000
+      x: -150
+      'y': 1920
     data:
       type: claude-agent
       name: UI Developer
@@ -643,8 +644,8 @@ nodes:
   - id: ui-developer-standalone
     type: claude-agent
     position:
-      x: -500
-      'y': 2000
+      x: -555
+      'y': 1920
     data:
       type: claude-agent
       name: UI Developer (Standalone)
@@ -1034,7 +1035,6 @@ nodes:
       type: output
       name: Implementation Complete
 edges:
-  # Phase 1: Planning
   - id: e-input-planner
     source: input-feature
     target: planner
@@ -1049,7 +1049,6 @@ edges:
     source: plan-review
     target: planner
     sourceHandle: rejected
-  # Phase 2: Backend or Frontend-only routing
   - id: e-backend-needed-yes
     source: check-backend-needed
     target: backend-dev
@@ -1194,4 +1193,4 @@ edges:
     source: merge-results
     target: output-final
 createdAt: '2026-01-24T22:00:00.000Z'
-updatedAt: '2026-01-24T21:50:13.346Z'
+updatedAt: '2026-01-25T22:48:05.649Z'
