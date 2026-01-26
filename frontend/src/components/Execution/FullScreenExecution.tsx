@@ -95,7 +95,7 @@ function FullScreenExecutionComponent({
   }
 
   return (
-    <div className="flex-1 flex bg-gray-100 dark:bg-gray-950">
+    <div className="flex-1 flex bg-gray-100 dark:bg-gray-950 min-w-0 overflow-hidden">
       {/* Left Sidebar */}
       <div className="w-80 flex flex-col border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
         {/* Execution History - takes up available space */}

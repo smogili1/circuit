@@ -255,7 +255,7 @@ function ExecutionWorkflowViewInner({
 
       {/* Workflow Diagram - Collapsible */}
       {!isCollapsed && (
-        <div className="h-44 relative">
+        <div className="h-44 relative overflow-hidden">
           <ReactFlow
             nodes={nodes}
             edges={edges}

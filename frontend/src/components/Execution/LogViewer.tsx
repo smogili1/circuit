@@ -365,7 +365,7 @@ function LogViewerComponent({
                           <CheckCircle2 size={12} />
                           Result
                         </div>
-                        <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono">
+                        <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-all font-mono overflow-x-auto max-h-40">
                           {typeof output.result === 'string'
                             ? output.result
                             : JSON.stringify(output.result, null, 2)}
@@ -404,7 +404,7 @@ function LogViewerComponent({
                         <CheckCircle2 size={12} />
                         Result
                       </div>
-                      <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono max-h-40 overflow-y-auto">
+                      <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-all font-mono max-h-40 overflow-auto">
                         {typeof output.result === 'string'
                           ? output.result
                           : JSON.stringify(output.result, null, 2)}
