@@ -192,23 +192,12 @@ function renderPropertyInput(
       );
 
     case 'select': {
-      const selectValue = (value as string) ?? (property.default as string) ?? '';
       return (
-        <select
-          value={selectValue}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full px-3 py-2 text-sm border rounded-md dark:bg-gray-800 dark:border-gray-600"
-        >
-          {property.options?.map((option) => {
-            const optValue = typeof option === 'string' ? option : option.value;
-            const optLabel = typeof option === 'string' ? option : option.label;
-            return (
-              <option key={optValue} value={optValue}>
-                {optLabel}
-              </option>
-            );
-          })}
-        </select>
+        <SelectField
+          property={property}
+          value={value as string}
+          onChange={onChange}
+        />
       );
     }
 
@@ -727,5 +716,37 @@ function Field({
       </label>
       {children}
     </div>
+  );
+}
+
+// Select field component
+function SelectField({
+  property,
+  value,
+  onChange,
+}: {
+  property: PropertyDefinition;
+  value: string | undefined;
+  onChange: (value: unknown) => void;
+}) {
+  const options = property.options || [];
+  const selectValue = value ?? (property.default as string) ?? '';
+
+  return (
+    <select
+      value={selectValue}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full px-3 py-2 text-sm border rounded-md dark:bg-gray-800 dark:border-gray-600"
+    >
+      {options.map((option) => {
+        const optValue = typeof option === 'string' ? option : option.value;
+        const optLabel = typeof option === 'string' ? option : option.label;
+        return (
+          <option key={optValue} value={optValue}>
+            {optLabel}
+          </option>
+        );
+      })}
+    </select>
   );
 }

@@ -459,6 +459,13 @@ export function useSocket() {
         const summary = (await summaryRes.json()) as ExecutionSummary;
         const events = (await eventsRes.json()) as ExecutionEventRecord[];
         const state = buildExecutionStateFromHistory(summary, events);
+
+        // Reset subscription ref when loading from history so the subscription effect
+        // will trigger for running executions
+        if (state.isRunning) {
+          subscribedExecutionIdRef.current = null;
+        }
+
         setExecution(state);
       } catch (error) {
         console.error('Failed to load execution details:', error);

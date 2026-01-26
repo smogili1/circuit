@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CheckCircle2, XCircle, Clock, AlertCircle } from 'lucide-react';
 import { ApprovalRequest, ApprovalResponse } from '../../types/workflow';
 import { DataRenderer } from './DataRenderer';
@@ -11,6 +11,15 @@ interface ApprovalModalProps {
 export function ApprovalModal({ approval, onSubmit }: ApprovalModalProps) {
   const [feedback, setFeedback] = useState('');
   const [isRejecting, setIsRejecting] = useState(false);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
 
   const handleApprove = () => {
     onSubmit(approval.nodeId, {

@@ -189,14 +189,14 @@ function ExecutionWorkflowViewInner({
   };
 
   return (
-    <div className="border-b border-gray-800 bg-gray-900">
+    <div className="border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
       {/* Status Bar - Always visible */}
-      <div className="flex items-center justify-between px-4 py-2 bg-gray-900/80 border-b border-gray-800/50">
+      <div className="flex items-center justify-between px-4 py-2 bg-white/80 dark:bg-gray-900/80 border-b border-gray-200/50 dark:border-gray-800/50">
         <div className="flex items-center gap-4">
           {/* Toggle button */}
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors"
+            className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
           >
             {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
             <span className="font-medium">Workflow</span>
@@ -204,7 +204,7 @@ function ExecutionWorkflowViewInner({
 
           {/* Progress bar */}
           <div className="flex items-center gap-2">
-            <div className="w-24 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+            <div className="w-24 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
               <div
                 className={`h-full transition-all duration-300 ${
                   stats.errors > 0 ? 'bg-red-500' : stats.progress === 100 ? 'bg-green-500' : 'bg-blue-500'
@@ -218,25 +218,25 @@ function ExecutionWorkflowViewInner({
           {/* Stats */}
           <div className="flex items-center gap-3 text-xs">
             {stats.running > 0 && (
-              <span className="flex items-center gap-1 text-blue-400">
+              <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
                 <Activity size={12} className="animate-pulse" />
                 {stats.running} running
               </span>
             )}
             {stats.waiting > 0 && (
-              <span className="flex items-center gap-1 text-purple-400">
+              <span className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
                 <AlertTriangle size={12} />
                 {stats.waiting} waiting
               </span>
             )}
             {stats.complete > 0 && (
-              <span className="flex items-center gap-1 text-green-400">
+              <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
                 <CheckCircle size={12} />
                 {stats.complete}
               </span>
             )}
             {stats.errors > 0 && (
-              <span className="flex items-center gap-1 text-red-400">
+              <span className="flex items-center gap-1 text-red-600 dark:text-red-400">
                 <XCircle size={12} />
                 {stats.errors} failed
               </span>
@@ -270,12 +270,12 @@ function ExecutionWorkflowViewInner({
             panOnScroll={false}
             panOnDrag={true}
             preventScrolling={true}
-            className="bg-gray-950"
+            className="bg-gray-100 dark:bg-gray-950"
             minZoom={0.2}
             maxZoom={0.8}
             proOptions={{ hideAttribution: true }}
           >
-            <Background gap={20} size={1} color="#1f2937" />
+            <Background gap={20} size={1} className="[&>pattern>rect]:fill-gray-300 dark:[&>pattern>rect]:fill-gray-800" />
           </ReactFlow>
 
           {/* Mini legend */}
@@ -293,7 +293,7 @@ function ExecutionWorkflowViewInner({
 
           {/* Click hint when no selection */}
           {!selectedNodeId && isRunning && (
-            <div className="absolute top-2 right-2 text-[10px] text-gray-500 bg-gray-900/90 px-2 py-1 rounded">
+            <div className="absolute top-2 right-2 text-[10px] text-gray-500 bg-white/90 dark:bg-gray-900/90 px-2 py-1 rounded">
               Click node to filter logs
             </div>
           )}

@@ -20,7 +20,7 @@ export function ExecutionControls({
   onReset,
 }: ExecutionControlsProps) {
   return (
-    <div className="p-4 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
+    <div className="p-4 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800">
       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
         Input Prompt
       </label>
@@ -31,7 +31,7 @@ export function ExecutionControls({
         placeholder="Enter your task description..."
         disabled={isRunning}
         className="w-full px-3 py-2 text-sm border rounded-md resize-none
-          dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100
+          bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100
           disabled:opacity-50 disabled:cursor-not-allowed
           focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
@@ -61,8 +61,7 @@ export function ExecutionControls({
           onClick={onReset}
           disabled={isRunning}
           className="flex items-center gap-2 px-4 py-2 text-sm font-medium
-            text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800
-            hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md
+            text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md
             disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           <RefreshCw size={16} />

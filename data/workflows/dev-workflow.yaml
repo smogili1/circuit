@@ -60,6 +60,7 @@ nodes:
       approvalPolicy: never
       sandbox: danger-full-access
       workingDirectory: ''
+      reasoningEffort: medium
   - id: output-1
     type: output
     position:
@@ -103,4 +104,4 @@ edges:
     target: claude-1
     sourceHandle: rejected
 createdAt: '2026-01-22T07:18:08.167Z'
-updatedAt: '2026-01-26T01:20:41.037Z'
+updatedAt: '2026-01-26T06:32:02.557Z'

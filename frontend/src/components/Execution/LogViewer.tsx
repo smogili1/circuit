@@ -151,15 +151,15 @@ function LogViewerComponent({
   const errorCount = Array.from(nodeStates.values()).filter((s) => s === 'error').length;
 
   return (
-    <div className="flex flex-col h-full bg-gray-950">
+    <div className="flex flex-col h-full bg-white dark:bg-gray-950 min-w-0">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 bg-gray-900/50">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
         <div className="flex items-center gap-3">
-          <h3 className="text-sm font-medium text-gray-300">Logs</h3>
+          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Logs</h3>
           {selectedNodeId && (
             <button
               onClick={() => onNodeSelect(null)}
-              className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 bg-blue-500/10 px-2 py-0.5 rounded"
+              className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 bg-blue-100 dark:bg-blue-500/10 px-2 py-0.5 rounded"
             >
               <X size={12} />
               Clear filter
@@ -167,17 +167,17 @@ function LogViewerComponent({
           )}
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex border border-gray-700 rounded overflow-hidden">
+          <div className="flex border border-gray-300 dark:border-gray-700 rounded overflow-hidden">
             <button
               onClick={() => setExpandedNodes(new Set(Array.from(nodeOutputs.keys())))}
-              className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800"
+              className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800"
               title="Expand all"
             >
               <ArrowDown size={14} />
             </button>
             <button
               onClick={() => setExpandedNodes(new Set())}
-              className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 border-l border-gray-700"
+              className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 border-l border-gray-300 dark:border-gray-700"
               title="Collapse all"
             >
               <ArrowUp size={14} />
@@ -186,7 +186,7 @@ function LogViewerComponent({
           <button
             onClick={() => setAutoScroll(!autoScroll)}
             className={`text-xs px-2 py-1 rounded transition-colors ${
-              autoScroll ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+              autoScroll ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-700'
             }`}
           >
             Auto-scroll
@@ -196,7 +196,7 @@ function LogViewerComponent({
 
       {/* Error Banner */}
       {errorCount > 0 && !selectedNodeId && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-red-950/50 border-b border-red-500/30 text-red-400">
+        <div className="flex items-center gap-2 px-4 py-2 bg-red-100 dark:bg-red-950/50 border-b border-red-300 dark:border-red-500/30 text-red-600 dark:text-red-400">
           <AlertCircle size={16} />
           <span className="text-sm font-medium">
             {errorCount} node{errorCount !== 1 ? 's' : ''} failed
@@ -205,24 +205,24 @@ function LogViewerComponent({
       )}
 
       {/* Content */}
-      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3">
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3 min-w-0">
         {/* User Input */}
         {submittedInput && !selectedNodeId && (
-          <div className="rounded-lg border border-cyan-500/30 bg-cyan-950/20 p-4">
-            <div className="flex items-center gap-2 text-xs font-medium text-cyan-400 mb-2">
+          <div className="rounded-lg border border-cyan-300 dark:border-cyan-500/30 bg-cyan-50 dark:bg-cyan-950/20 p-4">
+            <div className="flex items-center gap-2 text-xs font-medium text-cyan-600 dark:text-cyan-400 mb-2">
               <MessageSquare size={14} />
               Input
             </div>
-            <div className="text-sm text-gray-200 whitespace-pre-wrap">{submittedInput}</div>
+            <div className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{submittedInput}</div>
           </div>
         )}
 
         {/* Empty State */}
         {displayNodes.length === 0 && !submittedInput && (
           <div className="text-center text-gray-500 py-16">
-            <Sparkles size={32} className="mx-auto mb-3 text-gray-600" />
+            <Sparkles size={32} className="mx-auto mb-3 text-gray-400 dark:text-gray-600" />
             <p className="font-medium">No logs yet</p>
-            <p className="text-sm mt-1 text-gray-600">Run the workflow to see execution logs</p>
+            <p className="text-sm mt-1 text-gray-400 dark:text-gray-600">Run the workflow to see execution logs</p>
           </div>
         )}
 
@@ -242,19 +242,19 @@ function LogViewerComponent({
 
           // Status-based card styling
           const cardBorder = isError
-            ? 'border-red-500/50'
+            ? 'border-red-400 dark:border-red-500/50'
             : isRunning
-            ? 'border-blue-500/50'
+            ? 'border-blue-400 dark:border-blue-500/50'
             : isWaiting
-            ? 'border-purple-500/50'
+            ? 'border-purple-400 dark:border-purple-500/50'
             : colors.borderColor;
 
           const cardShadow = isError
-            ? 'shadow-lg shadow-red-500/10'
+            ? 'shadow-lg shadow-red-200 dark:shadow-red-500/10'
             : isRunning
-            ? 'shadow-lg shadow-blue-500/10'
+            ? 'shadow-lg shadow-blue-200 dark:shadow-blue-500/10'
             : isWaiting
-            ? 'shadow-lg shadow-purple-500/10'
+            ? 'shadow-lg shadow-purple-200 dark:shadow-purple-500/10'
             : '';
 
           return (
@@ -277,12 +277,12 @@ function LogViewerComponent({
                   <div
                     className={`flex items-center justify-center w-7 h-7 rounded-md ${
                       isRunning
-                        ? 'bg-blue-500/30'
+                        ? 'bg-blue-100 dark:bg-blue-500/30'
                         : isWaiting
-                        ? 'bg-purple-500/30'
+                        ? 'bg-purple-100 dark:bg-purple-500/30'
                         : isError
-                        ? 'bg-red-500/30'
-                        : 'bg-gray-700/50'
+                        ? 'bg-red-100 dark:bg-red-500/30'
+                        : 'bg-gray-200 dark:bg-gray-700/50'
                     }`}
                   >
                     <Icon size={14} className={colors.color} />
@@ -292,7 +292,7 @@ function LogViewerComponent({
                   <div className="flex flex-col items-start min-w-0">
                     <span className={`font-medium truncate ${colors.color}`}>{nodeName}</span>
                     {output.startedAt && (
-                      <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500 flex items-center gap-1">
                         <Clock size={9} />
                         {formatTime(output.startedAt)}
                       </span>
@@ -314,7 +314,7 @@ function LogViewerComponent({
                           }`}
                         />
                       </span>
-                      <span className={`text-xs font-medium ${isRunning ? 'text-blue-400' : 'text-purple-400'}`}>
+                      <span className={`text-xs font-medium ${isRunning ? 'text-blue-600 dark:text-blue-400' : 'text-purple-600 dark:text-purple-400'}`}>
                         {isRunning ? 'Running' : 'Waiting'}
                       </span>
                     </span>
@@ -328,8 +328,8 @@ function LogViewerComponent({
                     <span
                       className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
                         branchResult
-                          ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                          : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                          ? 'bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400 border border-green-300 dark:border-green-500/30'
+                          : 'bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-300 dark:border-red-500/30'
                       }`}
                     >
                       {branchResult ? 'TRUE' : 'FALSE'}
@@ -338,7 +338,7 @@ function LogViewerComponent({
 
                   {/* Event count */}
                   {output.events.length > 0 && (
-                    <span className="text-[10px] text-gray-500 bg-gray-800/80 px-1.5 py-0.5 rounded">
+                    <span className="text-[10px] text-gray-500 bg-gray-200 dark:bg-gray-800/80 px-1.5 py-0.5 rounded">
                       {output.events.length}
                     </span>
                   )}
@@ -357,22 +357,22 @@ function LogViewerComponent({
 
               {/* Content */}
               {isExpanded && (
-                <div className="px-4 py-3 bg-gray-900/70 border-t border-gray-800/50">
+                <div className="px-4 py-3 bg-gray-50 dark:bg-gray-900/70 border-t border-gray-200 dark:border-gray-800/50">
                   {output.events.length === 0 ? (
                     status === 'complete' && output.result !== undefined ? (
-                      <div className="rounded-md bg-green-950/30 border border-green-500/20 p-3">
-                        <div className="text-xs font-medium text-green-400 mb-2 flex items-center gap-1">
+                      <div className="rounded-md bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-500/20 p-3">
+                        <div className="text-xs font-medium text-green-600 dark:text-green-400 mb-2 flex items-center gap-1">
                           <CheckCircle2 size={12} />
                           Result
                         </div>
-                        <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono">
+                        <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono">
                           {typeof output.result === 'string'
                             ? output.result
                             : JSON.stringify(output.result, null, 2)}
                         </pre>
                       </div>
                     ) : isRunning || isWaiting ? (
-                      <p className="text-sm text-gray-400">
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
                         {isWaiting ? 'Waiting for approval...' : 'Processing...'}
                       </p>
                     ) : (
@@ -388,23 +388,23 @@ function LogViewerComponent({
 
                   {/* Error */}
                   {output.error && (
-                    <div className="mt-3 p-3 rounded-md bg-red-950/40 border border-red-500/30">
-                      <p className="text-sm font-medium text-red-400 flex items-center gap-1">
+                    <div className="mt-3 p-3 rounded-md bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-500/30">
+                      <p className="text-sm font-medium text-red-600 dark:text-red-400 flex items-center gap-1">
                         <AlertCircle size={14} />
                         Error
                       </p>
-                      <p className="text-xs text-red-300 mt-1 font-mono">{output.error}</p>
+                      <p className="text-xs text-red-500 dark:text-red-300 mt-1 font-mono">{output.error}</p>
                     </div>
                   )}
 
                   {/* Final result */}
                   {status === 'complete' && output.result !== undefined && output.events.length > 0 && (
-                    <div className="mt-3 p-3 rounded-md bg-green-950/30 border border-green-500/20">
-                      <div className="text-xs font-medium text-green-400 mb-2 flex items-center gap-1">
+                    <div className="mt-3 p-3 rounded-md bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-500/20">
+                      <div className="text-xs font-medium text-green-600 dark:text-green-400 mb-2 flex items-center gap-1">
                         <CheckCircle2 size={12} />
                         Result
                       </div>
-                      <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono max-h-40 overflow-y-auto">
+                      <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono max-h-40 overflow-y-auto">
                         {typeof output.result === 'string'
                           ? output.result
                           : JSON.stringify(output.result, null, 2)}
