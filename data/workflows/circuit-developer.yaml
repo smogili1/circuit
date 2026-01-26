@@ -725,16 +725,18 @@ nodes:
   - id: e2e-test-designer
     type: claude-agent
     position:
-      x: -500
-      'y': 2350
+      x: -660
+      'y': 2310
     data:
       type: claude-agent
       name: E2E Test Designer
-      model: sonnet
+      model: haiku
       tools:
         - Read
         - Glob
         - Grep
+        - Write
+        - Edit
       systemPrompt: |
         You are designing E2E test scenarios using Playwright.
         Focus on critical user flows and interaction patterns.
@@ -797,18 +799,22 @@ nodes:
     data:
       type: claude-agent
       name: E2E Tester
-      model: sonnet
+      model: haiku
       tools:
         - Read
         - Glob
         - Grep
         - Bash
+        - Write
+        - Edit
       mcpServers:
         - name: playwright
           command: npx
           args:
             - '-y'
             - '@anthropic-ai/mcp-server-playwright'
+        - serverId: ec929ef0-b7bb-491f-a53f-cbdacd5c1c7a
+          enabledTools: '*'
       systemPrompt: |
         You are running E2E tests using Playwright via MCP.
         Execute the test scenarios step by step.
@@ -946,8 +952,8 @@ nodes:
   - id: e2e-manual-fix
     type: approval
     position:
-      x: -200
-      'y': 3050
+      x: -270
+      'y': 3090
     data:
       type: approval
       name: E2E Manual Fix
@@ -1020,8 +1026,8 @@ nodes:
   - id: merge-results
     type: merge
     position:
-      x: -500
-      'y': 3100
+      x: -585
+      'y': 3105
     data:
       type: merge
       name: Merge Results
@@ -1193,4 +1199,4 @@ edges:
     source: merge-results
     target: output-final
 createdAt: '2026-01-24T22:00:00.000Z'
-updatedAt: '2026-01-25T22:48:05.649Z'
+updatedAt: '2026-01-26T04:53:03.006Z'
