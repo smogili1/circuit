@@ -31,8 +31,23 @@ export const codexAgentSchema = defineSchema({
       displayName: 'Model',
       default: 'gpt-5.2-codex',
       options: [
-        { value: 'gpt-5.2-codex', label: 'GPT-5.2 Codex' },
-        { value: 'gpt-5.1-codex-max', label: 'GPT-5.1 Codex Max' },
+        { value: 'gpt-5.2-codex', label: 'GPT-5.2 Codex (Latest frontier)' },
+        { value: 'gpt-5.2', label: 'GPT-5.2 (Frontier reasoning)' },
+        { value: 'gpt-5.1-codex-max', label: 'GPT-5.1 Codex Max (Deep reasoning)' },
+        { value: 'gpt-5.1-codex-mini', label: 'GPT-5.1 Codex Mini (Faster)' },
+      ] as const,
+    },
+    reasoningEffort: {
+      type: 'select',
+      displayName: 'Reasoning Effort',
+      default: 'medium',
+      description: 'Controls how much effort the model spends on reasoning',
+      options: [
+        { value: 'minimal', label: 'Minimal' },
+        { value: 'low', label: 'Low' },
+        { value: 'medium', label: 'Medium' },
+        { value: 'high', label: 'High' },
+        { value: 'xhigh', label: 'Extra High' },
       ] as const,
     },
     approvalPolicy: {

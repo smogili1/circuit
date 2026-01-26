@@ -129,7 +129,7 @@ export class ClaudeAgent extends BaseAgent {
       // Build options object, only including defined values
       const options: Record<string, unknown> = {
         cwd: input.workingDirectory || context.workingDirectory,
-
+        model: this.config.model,
       };
 
       // Only add allowedTools if there are any
@@ -299,4 +299,5 @@ export class ClaudeAgent extends BaseAgent {
   getStructuredOutput(): AgentStructuredOutput | undefined {
     return this.structuredOutput;
   }
+
 }

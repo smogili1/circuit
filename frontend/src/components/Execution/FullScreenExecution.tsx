@@ -83,7 +83,7 @@ function FullScreenExecutionComponent({
 
   if (!workflow) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-950 text-gray-400">
+      <div className="flex-1 flex items-center justify-center bg-gray-100 dark:bg-gray-950 text-gray-500 dark:text-gray-400">
         <div className="text-center">
           <p className="text-lg mb-2">No workflow selected</p>
           <p className="text-sm">
@@ -95,9 +95,9 @@ function FullScreenExecutionComponent({
   }
 
   return (
-    <div className="flex-1 flex bg-gray-950">
+    <div className="flex-1 flex bg-gray-100 dark:bg-gray-950 min-w-0 overflow-hidden">
       {/* Left Sidebar */}
-      <div className="w-80 flex flex-col border-r border-gray-800">
+      <div className="w-80 flex flex-col border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
         {/* Execution History - takes up available space */}
         <div className="flex-1 min-h-0 overflow-hidden">
           <ExecutionHistory
@@ -123,7 +123,7 @@ function FullScreenExecutionComponent({
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Compact workflow diagram with status */}
         <ExecutionWorkflowView
           workflow={workflow}
@@ -136,7 +136,7 @@ function FullScreenExecutionComponent({
         />
 
         {/* Log Viewer - takes most of the space */}
-        <div className="flex-1 min-h-0">
+        <div className="flex-1 min-h-0 min-w-0 overflow-hidden">
           <LogViewer
             submittedInput={submittedInput}
             nodeOutputs={nodeOutputs}

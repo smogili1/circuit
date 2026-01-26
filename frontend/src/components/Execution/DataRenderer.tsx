@@ -280,7 +280,7 @@ function RenderContent({ detected }: { detected: DetectedData }) {
     case 'primitive':
     default:
       return (
-        <pre className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap font-mono">
+        <pre className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-all font-mono overflow-x-auto">
           {String(detected.content)}
         </pre>
       );

@@ -34,17 +34,17 @@ function truncate(value: string, maxLength: number): string {
 }
 
 const statusStyles: Record<string, string> = {
-  running: 'bg-blue-100 text-blue-700',
-  complete: 'bg-green-100 text-green-700',
-  error: 'bg-red-100 text-red-700',
-  interrupted: 'bg-yellow-100 text-yellow-700',
+  running: 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-400',
+  complete: 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400',
+  error: 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-400',
+  interrupted: 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-400',
 };
 
 export function ExecutionHistory({
   workflowId,
   executions,
   activeExecutionId,
-  isRunning,
+  isRunning: _isRunning,
   onRefresh,
   onLoad,
 }: ExecutionHistoryProps) {
@@ -55,7 +55,7 @@ export function ExecutionHistory({
   };
 
   return (
-    <div className="h-full flex flex-col p-4 border-b border-gray-200 dark:border-gray-700">
+    <div className="h-full flex flex-col p-4 border-b border-gray-200 dark:border-gray-800">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
           <History size={16} />
@@ -80,7 +80,7 @@ export function ExecutionHistory({
           {executions.map((execution) => {
             const isActive = execution.executionId === activeExecutionId;
             const statusClass =
-              statusStyles[execution.status] || 'bg-gray-100 text-gray-600';
+              statusStyles[execution.status] || 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400';
             // Allow clicking to view any execution, even while another is running
             const isClickable = !!workflowId;
 

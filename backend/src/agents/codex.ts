@@ -38,6 +38,7 @@ interface CodexThreadOptions {
   model?: string;
   sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
   approvalPolicy?: 'untrusted' | 'on-request' | 'on-failure' | 'never';
+  modelReasoningEffort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   workingDirectory?: string;
   mcpServers?: SDKMCPServersConfig;
 }
@@ -325,6 +326,7 @@ export class CodexAgent extends BaseAgent {
         model: this.config.model,
         sandboxMode: this.config.sandbox,
         approvalPolicy: this.config.approvalPolicy,
+        modelReasoningEffort: this.config.reasoningEffort,
         workingDirectory: input.workingDirectory || context.workingDirectory,
       };
 
