@@ -205,7 +205,7 @@ function LogViewerComponent({
       )}
 
       {/* Content */}
-      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3">
         {/* User Input */}
         {submittedInput && !selectedNodeId && (
           <div className="rounded-lg border border-cyan-500/30 bg-cyan-950/20 p-4">
