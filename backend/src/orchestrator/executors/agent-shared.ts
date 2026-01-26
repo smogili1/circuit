@@ -103,6 +103,7 @@ export interface AgentNodeConfig {
  */
 export interface ExecutableAgent {
   execute(input: AgentInput, context: ExecutionContext): AsyncGenerator<AgentEvent, void, unknown>;
+  interrupt(): Promise<void>;
   getSessionId(): string | undefined;
   getStructuredOutput(): AgentStructuredOutput | undefined;
 }
@@ -310,6 +311,14 @@ export async function executeAgentNode<TConfig extends AgentNodeConfig, TMCPConf
     },
   });
 
+  // Link engine's abort signal to agent's abort controller
+  // This ensures that when the engine aborts (e.g., page refresh), the agent is also interrupted
+  const abortHandler = () => {
+    console.log(`[${nodeType}Executor] Abort signal received, interrupting agent`);
+    agent.interrupt();
+  };
+  context.abortSignal.addEventListener('abort', abortHandler);
+
   try {
     for await (const event of agent.execute(input, context.executionContext)) {
       // Check if execution was aborted
@@ -368,6 +377,9 @@ export async function executeAgentNode<TConfig extends AgentNodeConfig, TMCPConf
       }
     }
   } finally {
+    // Clean up abort listener to avoid memory leaks
+    context.abortSignal.removeEventListener('abort', abortHandler);
+
     flushText();
 
     // Build this run's transcript

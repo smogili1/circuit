@@ -63,11 +63,38 @@ export class ClaudeAgent extends BaseAgent {
   private mcpConfig?: MCPAgentConfig;
   private sessionId?: string;
   private structuredOutput?: AgentStructuredOutput;
+  // Store reference to the active stream so we can close it on interrupt
+  private activeStream?: AsyncIterable<unknown>;
 
   constructor(config: ClaudeNodeConfig, mcpConfig?: MCPAgentConfig) {
     super();
     this.config = config;
     this.mcpConfig = mcpConfig;
+  }
+
+  /**
+   * Interrupt the currently running execution.
+   * Closes the SDK stream to break out of the blocking for-await loop.
+   */
+  async interrupt(): Promise<void> {
+    console.log('[ClaudeAgent] Interrupt called');
+    // First abort the controller to signal we want to stop
+    await super.interrupt();
+
+    // Then close the active stream if it exists
+    // This breaks the for-await loop that may be blocked waiting for the next message
+    if (this.activeStream) {
+      const iterator = this.activeStream[Symbol.asyncIterator]?.();
+      if (iterator?.return) {
+        try {
+          await iterator.return(undefined);
+        } catch (e) {
+          // Ignore errors when closing the stream
+          console.log('[ClaudeAgent] Error closing stream:', e);
+        }
+      }
+      this.activeStream = undefined;
+    }
   }
 
   async *execute(
@@ -147,6 +174,9 @@ export class ClaudeAgent extends BaseAgent {
         options,
       });
 
+      // Store reference to stream so we can close it on interrupt
+      this.activeStream = stream;
+
       console.log('[ClaudeAgent] Stream created, iterating...');
       for await (const message of stream) {
         console.log('[ClaudeAgent] Received message:', JSON.stringify(message).slice(0, 200));
@@ -189,6 +219,7 @@ export class ClaudeAgent extends BaseAgent {
         message: error instanceof Error ? error.message : 'Unknown error',
       };
     } finally {
+      this.activeStream = undefined;
       this.cleanup();
     }
   }
