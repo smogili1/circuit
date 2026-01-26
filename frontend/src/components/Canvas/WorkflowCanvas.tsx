@@ -1,10 +1,11 @@
-import { useCallback, useRef, useMemo } from 'react';
+import { useCallback, useRef, useMemo, useEffect } from 'react';
 import {
   ReactFlow,
   Background,
   Controls,
   ReactFlowProvider,
   ReactFlowInstance,
+  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { GenericNode } from '../Nodes';
@@ -20,8 +21,20 @@ function WorkflowCanvasInner({ nodeStates }: WorkflowCanvasProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const reactFlowInstance = useRef<ReactFlowInstance<FlowNode, FlowEdge> | null>(null);
 
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode } =
+  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, workflow } =
     useWorkflowStore();
+  const { fitView } = useReactFlow();
+
+  // Fit view when workflow changes
+  useEffect(() => {
+    if (workflow?.id) {
+      // Small delay to ensure nodes are rendered before fitting
+      const timer = setTimeout(() => {
+        fitView({ padding: 0.2 });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [workflow?.id, fitView]);
   const { getNodeTypes } = useSchemaStore();
 
   // Generate nodeTypes dynamically from backend schemas

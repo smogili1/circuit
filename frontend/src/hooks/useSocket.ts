@@ -47,6 +47,7 @@ interface ExecutionState {
   finalResult: unknown | null;
   pendingApproval: ApprovalRequest | null;
   validationErrors: WorkflowValidationError[] | null;
+  lastEventTimestamp: string | null;
 }
 
 interface ExecutionHistoryState {
@@ -75,6 +76,7 @@ const buildEmptyExecutionState = (): ExecutionState => ({
   finalResult: null,
   pendingApproval: null,
   validationErrors: null,
+  lastEventTimestamp: null,
 });
 
 export function useSocket() {
@@ -114,10 +116,11 @@ export function useSocket() {
 
   const socketRef = useRef<Socket | null>(null);
   const subscribedExecutionIdRef = useRef<string | null>(null);
-  const hasAttemptedHistoryLoadRef = useRef<boolean>(false);
+
+  // Track whether we've completed initial recovery for this execution
+  const recoveryCompleteRef = useRef<boolean>(false);
 
   useEffect(() => {
-    // Connect to same origin (unified server)
     const socket = io({
       transports: ['websocket', 'polling'],
     });
@@ -174,17 +177,18 @@ export function useSocket() {
       const branchResults = new Map<string, boolean>();
       let finalResult: unknown | null = summary.finalResult ?? null;
       let executionStartedAt: number | null = null;
+      let lastEventTimestamp: string | null = null;
 
       for (const record of events) {
         const event = record.event;
+        lastEventTimestamp = record.timestamp;
 
         switch (event.type) {
           case 'execution-start':
             executionStartedAt = Date.parse(record.timestamp);
             break;
-          case 'node-start':
+          case 'node-start': {
             nodeStates.set(event.nodeId, 'running');
-            // Preserve existing events if this node is re-running (e.g., in a loop)
             const existingHistoryOutput = nodeOutputs.get(event.nodeId);
             nodeOutputs.set(event.nodeId, {
               nodeId: event.nodeId,
@@ -193,6 +197,7 @@ export function useSocket() {
               startedAt: Date.parse(record.timestamp),
             });
             break;
+          }
           case 'node-output': {
             const existing = nodeOutputs.get(event.nodeId) || {
               nodeId: event.nodeId,
@@ -214,7 +219,6 @@ export function useSocket() {
                 completedAt: Date.parse(record.timestamp),
               });
             }
-            // Track branch results for condition nodes (result is boolean)
             if (typeof event.result === 'boolean') {
               branchResults.set(event.nodeId, event.result);
               branchPaths.push({
@@ -263,6 +267,7 @@ export function useSocket() {
         finalResult,
         pendingApproval: null,
         validationErrors: null,
+        lastEventTimestamp,
       };
     },
     []
@@ -274,16 +279,17 @@ export function useSocket() {
       const newNodeOutputs = new Map(prev.nodeOutputs);
       const newBranchResults = new Map(prev.branchResults);
       const newBranchPaths = [...prev.branchPaths];
+      const timestamp = new Date().toISOString();
 
       switch (event.type) {
         case 'execution-start':
           subscribedExecutionIdRef.current = event.executionId;
-          hasAttemptedHistoryLoadRef.current = false; // Reset for new execution
+          recoveryCompleteRef.current = true;
           return {
             isRunning: true,
             executionId: event.executionId,
             workflowId: event.workflowId ?? prev.workflowId,
-            submittedInput: prev.submittedInput, // Preserve the submitted input
+            submittedInput: prev.submittedInput,
             executionStartedAt: Date.now(),
             nodeStates: new Map(),
             nodeOutputs: new Map(),
@@ -292,13 +298,12 @@ export function useSocket() {
             branchResults: new Map(),
             finalResult: null,
             pendingApproval: null,
-            validationErrors: null, // Clear any previous validation errors
+            validationErrors: null,
+            lastEventTimestamp: timestamp,
           };
 
         case 'node-start':
           newNodeStates.set(event.nodeId, 'running');
-          // Preserve existing events if this node is re-running (e.g., in a loop)
-          // This ensures we don't lose logs from previous runs
           const existingNodeOutput = newNodeOutputs.get(event.nodeId);
           newNodeOutputs.set(event.nodeId, {
             nodeId: event.nodeId,
@@ -306,9 +311,9 @@ export function useSocket() {
             events: existingNodeOutput?.events || [],
             startedAt: Date.now(),
           });
-          return { ...prev, nodeStates: newNodeStates, nodeOutputs: newNodeOutputs };
+          return { ...prev, nodeStates: newNodeStates, nodeOutputs: newNodeOutputs, lastEventTimestamp: timestamp };
 
-        case 'node-output':
+        case 'node-output': {
           const existing = newNodeOutputs.get(event.nodeId) || {
             nodeId: event.nodeId,
             events: [],
@@ -317,18 +322,19 @@ export function useSocket() {
             ...existing,
             events: [...existing.events, event.event],
           });
-          return { ...prev, nodeOutputs: newNodeOutputs };
+          return { ...prev, nodeOutputs: newNodeOutputs, lastEventTimestamp: timestamp };
+        }
 
         case 'node-waiting':
-          // Node is waiting for user approval
           newNodeStates.set(event.nodeId, 'waiting');
           return {
             ...prev,
             nodeStates: newNodeStates,
             pendingApproval: event.approval,
+            lastEventTimestamp: timestamp,
           };
 
-        case 'node-complete':
+        case 'node-complete': {
           newNodeStates.set(event.nodeId, 'complete');
           const nodeOutput = newNodeOutputs.get(event.nodeId);
           if (nodeOutput) {
@@ -338,17 +344,15 @@ export function useSocket() {
               completedAt: Date.now(),
             });
           }
-          // Track branch results for condition/approval nodes (result is boolean)
           if (typeof event.result === 'boolean') {
             newBranchResults.set(event.nodeId, event.result);
             newBranchPaths.push({
               nodeId: event.nodeId,
               nodeName: nodeOutput?.nodeName || event.nodeId,
               condition: event.result,
-              takenAt: new Date().toISOString(),
+              takenAt: timestamp,
             });
           }
-          // Clear pending approval if this was the approval node
           const clearApproval = prev.pendingApproval?.nodeId === event.nodeId;
           return {
             ...prev,
@@ -357,9 +361,11 @@ export function useSocket() {
             branchResults: newBranchResults,
             branchPaths: newBranchPaths,
             pendingApproval: clearApproval ? null : prev.pendingApproval,
+            lastEventTimestamp: timestamp,
           };
+        }
 
-        case 'node-error':
+        case 'node-error': {
           newNodeStates.set(event.nodeId, 'error');
           const errOutput = newNodeOutputs.get(event.nodeId);
           if (errOutput) {
@@ -369,14 +375,15 @@ export function useSocket() {
               completedAt: Date.now(),
             });
           }
-          // Clear pending approval if this was the approval node
           const clearApprovalErr = prev.pendingApproval?.nodeId === event.nodeId;
           return {
             ...prev,
             nodeStates: newNodeStates,
             nodeOutputs: newNodeOutputs,
             pendingApproval: clearApprovalErr ? null : prev.pendingApproval,
+            lastEventTimestamp: timestamp,
           };
+        }
 
         case 'execution-complete':
           return {
@@ -384,6 +391,7 @@ export function useSocket() {
             isRunning: false,
             finalResult: event.result,
             pendingApproval: null,
+            lastEventTimestamp: timestamp,
           };
 
         case 'execution-error':
@@ -392,6 +400,7 @@ export function useSocket() {
             isRunning: false,
             finalResult: { error: event.error },
             pendingApproval: null,
+            lastEventTimestamp: timestamp,
           };
 
         case 'validation-error':
@@ -407,6 +416,7 @@ export function useSocket() {
     });
   }, []);
 
+  // Persist active execution to sessionStorage
   useEffect(() => {
     if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') {
       return;
@@ -427,9 +437,7 @@ export function useSocket() {
 
   const fetchExecutionHistory = useCallback(async (workflowId: string) => {
     try {
-      const response = await fetch(
-        `/api/workflows/${workflowId}/executions`
-      );
+      const response = await fetch(`/api/workflows/${workflowId}/executions`);
       if (!response.ok) {
         console.error('Failed to load execution history');
         setExecutionHistory({ workflowId, executions: [] });
@@ -460,15 +468,11 @@ export function useSocket() {
         const events = (await eventsRes.json()) as ExecutionEventRecord[];
         const state = buildExecutionStateFromHistory(summary, events);
 
-        // Reset subscription ref when loading from history so the subscription effect
-        // will trigger for running executions
-        if (state.isRunning) {
-          subscribedExecutionIdRef.current = null;
-        }
-
         setExecution(state);
+        return state;
       } catch (error) {
         console.error('Failed to load execution details:', error);
+        return null;
       }
     },
     [buildExecutionStateFromHistory]
@@ -479,62 +483,55 @@ export function useSocket() {
     socketRef.current?.emit('save-workflow', workflow);
   }, []);
 
-  const subscribeToExecution = useCallback((executionId: string) => {
+  const subscribeToExecution = useCallback((executionId: string, afterTimestamp?: string) => {
     const event: ControlEvent = {
       type: 'subscribe-execution',
       executionId,
+      afterTimestamp,
     };
     socketRef.current?.emit('control', event);
   }, []);
 
+  // Recovery effect: when reconnecting with an active execution from sessionStorage
   useEffect(() => {
-    if (!isConnected) {
-      return;
-    }
-    if (!execution.isRunning || !execution.executionId) {
-      return;
-    }
-    if (subscribedExecutionIdRef.current === execution.executionId) {
-      return;
-    }
-    subscribeToExecution(execution.executionId);
-    subscribedExecutionIdRef.current = execution.executionId;
-  }, [execution.executionId, execution.isRunning, isConnected, subscribeToExecution]);
+    if (!isConnected) return;
+    if (!execution.isRunning || !execution.executionId || !execution.workflowId) return;
 
-  // Auto-load execution history when reconnecting to an active execution after page refresh
-  useEffect(() => {
-    // Only run when connected
-    if (!isConnected) {
-      return;
-    }
-    // Only run if we have an active execution from sessionStorage
-    if (!execution.isRunning || !execution.executionId || !execution.workflowId) {
-      return;
-    }
-    // Only run if we haven't loaded history yet (nodeOutputs is empty)
+    // Already recovered or subscribed
+    if (recoveryCompleteRef.current) return;
+    if (subscribedExecutionIdRef.current === execution.executionId) return;
+
+    // If we have data, we're already recovered - just subscribe for new events
     if (execution.nodeOutputs.size > 0) {
+      console.log('[useSocket] Already have execution data, subscribing for updates');
+      subscribeToExecution(execution.executionId, execution.lastEventTimestamp ?? undefined);
+      subscribedExecutionIdRef.current = execution.executionId;
+      recoveryCompleteRef.current = true;
       return;
     }
-    // Only attempt once per session to avoid loops
-    if (hasAttemptedHistoryLoadRef.current) {
-      return;
-    }
-    hasAttemptedHistoryLoadRef.current = true;
 
-    console.log('[useSocket] Reconnected with active execution, loading history:', execution.executionId);
-    loadExecutionHistory(execution.workflowId, execution.executionId);
-  }, [isConnected, execution.isRunning, execution.executionId, execution.workflowId, execution.nodeOutputs.size, loadExecutionHistory]);
+    // Need to recover: load history then subscribe
+    console.log('[useSocket] Recovering execution state:', execution.executionId);
+
+    loadExecutionHistory(execution.workflowId, execution.executionId).then((state) => {
+      if (state?.isRunning && state.executionId) {
+        console.log('[useSocket] Loaded history, subscribing with timestamp:', state.lastEventTimestamp);
+        subscribeToExecution(state.executionId, state.lastEventTimestamp ?? undefined);
+        subscribedExecutionIdRef.current = state.executionId;
+      }
+      recoveryCompleteRef.current = true;
+    });
+  }, [isConnected, execution.isRunning, execution.executionId, execution.workflowId, execution.nodeOutputs.size, execution.lastEventTimestamp, loadExecutionHistory, subscribeToExecution]);
 
   const startExecution = useCallback((workflowId: string, input: string) => {
     console.log('[useSocket] Starting execution:', { workflowId, input: input.slice(0, 100) });
-    // Track the submitted input immediately
+    recoveryCompleteRef.current = false;
     setExecution(prev => ({ ...prev, submittedInput: input, workflowId }));
     const event: ControlEvent = {
       type: 'start-execution',
       workflowId,
       input,
     };
-    console.log('[useSocket] Emitting control event:', event.type);
     socketRef.current?.emit('control', event);
   }, []);
 
@@ -548,7 +545,7 @@ export function useSocket() {
 
   const resetExecution = useCallback(() => {
     subscribedExecutionIdRef.current = null;
-    hasAttemptedHistoryLoadRef.current = false;
+    recoveryCompleteRef.current = false;
     setExecution(buildEmptyExecutionState());
   }, []);
 

@@ -163,7 +163,7 @@ export type ControlEvent =
   | { type: 'start-execution'; workflowId: string; input: string }
   | { type: 'interrupt'; executionId: string }
   | { type: 'resume'; executionId: string }
-  | { type: 'subscribe-execution'; executionId: string }
+  | { type: 'subscribe-execution'; executionId: string; afterTimestamp?: string }
   | {
       type: 'replay-execution';
       workflowId: string;

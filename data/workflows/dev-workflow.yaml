@@ -1,7 +1,7 @@
 id: eead093d-66f0-436f-aaca-512c09b9561a
 name: Dev Workflow
 description: A simple example workflow with Claude and Codex agents
-workingDirectory: /Users/shiva/circus
+workingDirectory: /Users/shiva/circus/frontend
 nodes:
   - id: input-1
     type: input
@@ -104,4 +104,4 @@ edges:
     target: claude-1
     sourceHandle: rejected
 createdAt: '2026-01-22T07:18:08.167Z'
-updatedAt: '2026-01-26T06:32:02.557Z'
+updatedAt: '2026-01-26T07:04:44.156Z'

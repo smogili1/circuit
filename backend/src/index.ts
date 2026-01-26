@@ -298,7 +298,7 @@ io.on('connection', async (socket: Socket) => {
         break;
 
       case 'subscribe-execution':
-        await handleSubscribeExecution(socket, event.executionId);
+        await handleSubscribeExecution(socket, event.executionId, event.afterTimestamp);
         break;
 
       case 'interrupt':
@@ -460,13 +460,19 @@ async function handleStartExecution(
   }
 }
 
-async function handleSubscribeExecution(socket: Socket, executionId: string): Promise<void> {
+async function handleSubscribeExecution(
+  socket: Socket,
+  executionId: string,
+  afterTimestamp?: string
+): Promise<void> {
   const execution = activeExecutions.get(executionId);
 
   if (!execution) {
+    // Execution not in memory - it's either completed or backend restarted
+    // Client should rely on REST API for historical data
     socket.emit('event', {
       type: 'execution-error',
-      error: 'No running execution found with this ID',
+      error: 'Execution not active',
     } as ExecutionEvent);
     return;
   }
@@ -478,10 +484,15 @@ async function handleSubscribeExecution(socket: Socket, executionId: string): Pr
   }
   socketSubscriptions.get(socket.id)!.add(executionId);
 
-  console.log(`Socket ${socket.id} subscribed to execution ${executionId}`);
+  console.log(`Socket ${socket.id} subscribed to execution ${executionId}${afterTimestamp ? ` (after ${afterTimestamp})` : ''}`);
 
+  // Replay events that occurred after the client's last known timestamp
   const events = await readExecutionEvents(execution.workflowId, executionId);
   for (const record of events) {
+    // If afterTimestamp provided, only send events that are newer
+    if (afterTimestamp && record.timestamp <= afterTimestamp) {
+      continue;
+    }
     socket.emit('event', record.event);
   }
 }
