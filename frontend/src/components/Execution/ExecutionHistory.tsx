@@ -81,7 +81,8 @@ export function ExecutionHistory({
             const isActive = execution.executionId === activeExecutionId;
             const statusClass =
               statusStyles[execution.status] || 'bg-gray-100 text-gray-600';
-            const isClickable = !isRunning && workflowId;
+            // Allow clicking to view any execution, even while another is running
+            const isClickable = !!workflowId;
 
             return (
               <button

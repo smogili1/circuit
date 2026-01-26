@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Workflow } from './types/workflow';
 import { useSocket } from './hooks/useSocket';
 import { useWorkflowStore } from './stores/workflowStore';
@@ -143,11 +143,26 @@ export default function App() {
     }
   }, [workflows, workflow, setWorkflow]);
 
+  // Track previous isRunning to detect when execution completes
+  const prevIsRunningRef = useRef(execution.isRunning);
+
   useEffect(() => {
-    if (workflow?.id && !execution.isRunning) {
+    if (!workflow?.id) {
+      return;
+    }
+
+    // Fetch on workflow change (always)
+    // Also refetch when execution completes (isRunning goes from true to false)
+    const executionJustCompleted = prevIsRunningRef.current && !execution.isRunning;
+    prevIsRunningRef.current = execution.isRunning;
+
+    // Always fetch on first load (when executionHistory is null or for different workflow)
+    const needsInitialFetch = !executionHistory || executionHistory.workflowId !== workflow.id;
+
+    if (needsInitialFetch || executionJustCompleted) {
       fetchExecutionHistory(workflow.id);
     }
-  }, [workflow?.id, execution.isRunning, fetchExecutionHistory]);
+  }, [workflow?.id, execution.isRunning, executionHistory, fetchExecutionHistory]);
 
   // Show loading state while schemas are loading
   if (schemasLoading || !schemasInitialized) {

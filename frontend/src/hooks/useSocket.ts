@@ -114,6 +114,7 @@ export function useSocket() {
 
   const socketRef = useRef<Socket | null>(null);
   const subscribedExecutionIdRef = useRef<string | null>(null);
+  const hasAttemptedHistoryLoadRef = useRef<boolean>(false);
 
   useEffect(() => {
     // Connect to same origin (unified server)
@@ -277,6 +278,7 @@ export function useSocket() {
       switch (event.type) {
         case 'execution-start':
           subscribedExecutionIdRef.current = event.executionId;
+          hasAttemptedHistoryLoadRef.current = false; // Reset for new execution
           return {
             isRunning: true,
             executionId: event.executionId,
@@ -492,6 +494,30 @@ export function useSocket() {
     subscribedExecutionIdRef.current = execution.executionId;
   }, [execution.executionId, execution.isRunning, isConnected, subscribeToExecution]);
 
+  // Auto-load execution history when reconnecting to an active execution after page refresh
+  useEffect(() => {
+    // Only run when connected
+    if (!isConnected) {
+      return;
+    }
+    // Only run if we have an active execution from sessionStorage
+    if (!execution.isRunning || !execution.executionId || !execution.workflowId) {
+      return;
+    }
+    // Only run if we haven't loaded history yet (nodeOutputs is empty)
+    if (execution.nodeOutputs.size > 0) {
+      return;
+    }
+    // Only attempt once per session to avoid loops
+    if (hasAttemptedHistoryLoadRef.current) {
+      return;
+    }
+    hasAttemptedHistoryLoadRef.current = true;
+
+    console.log('[useSocket] Reconnected with active execution, loading history:', execution.executionId);
+    loadExecutionHistory(execution.workflowId, execution.executionId);
+  }, [isConnected, execution.isRunning, execution.executionId, execution.workflowId, execution.nodeOutputs.size, loadExecutionHistory]);
+
   const startExecution = useCallback((workflowId: string, input: string) => {
     console.log('[useSocket] Starting execution:', { workflowId, input: input.slice(0, 100) });
     // Track the submitted input immediately
@@ -515,6 +541,7 @@ export function useSocket() {
 
   const resetExecution = useCallback(() => {
     subscribedExecutionIdRef.current = null;
+    hasAttemptedHistoryLoadRef.current = false;
     setExecution(buildEmptyExecutionState());
   }, []);
 
