@@ -363,20 +363,6 @@ async function handleStartExecution(
     return;
   }
 
-  const subscriptions = socketSubscriptions.get(socket.id);
-  if (subscriptions) {
-    for (const execId of subscriptions) {
-      const execution = activeExecutions.get(execId);
-      if (execution && execution.workflowId === workflowId) {
-        socket.emit('event', {
-          type: 'execution-error',
-          error: 'An execution is already running for this workflow',
-        } as ExecutionEvent);
-        return;
-      }
-    }
-  }
-
   // Validate workflow before execution
   const validation = validateWorkflow(workflow);
   if (!validation.valid) {

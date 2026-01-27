@@ -35,6 +35,7 @@ interface WorkflowState {
 
   // Actions
   setWorkflow: (workflow: Workflow) => void;
+  selectWorkflowById: (workflowId: string, workflows: Workflow[]) => boolean;
   updateWorkflowSettings: (settings: Partial<Pick<Workflow, 'name' | 'description' | 'workingDirectory'>>) => void;
   onNodesChange: OnNodesChange<FlowNode>;
   onEdgesChange: OnEdgesChange<FlowEdge>;
@@ -130,6 +131,15 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       edges: toFlowEdges(workflow.edges),
       selectedNodeId: null,
     });
+  },
+
+  selectWorkflowById: (workflowId, workflows) => {
+    const workflow = workflows.find(w => w.id === workflowId);
+    if (workflow) {
+      get().setWorkflow(workflow);
+      return true;
+    }
+    return false;
   },
 
   updateWorkflowSettings: (settings) => {

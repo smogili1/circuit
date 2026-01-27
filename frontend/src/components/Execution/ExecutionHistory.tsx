@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { ExecutionSummary } from '../../types/workflow';
 import { RefreshCw, History } from 'lucide-react';
 
@@ -48,6 +49,8 @@ export function ExecutionHistory({
   onRefresh,
   onLoad,
 }: ExecutionHistoryProps) {
+  const navigate = useNavigate();
+
   const handleRefresh = () => {
     if (workflowId) {
       onRefresh(workflowId);
@@ -87,7 +90,12 @@ export function ExecutionHistory({
             return (
               <button
                 key={execution.executionId}
-                onClick={() => workflowId && onLoad(workflowId, execution.executionId)}
+                onClick={() => {
+                  if (workflowId) {
+                    navigate(`/workflows/${workflowId}/executions/${execution.executionId}`);
+                    onLoad(workflowId, execution.executionId);
+                  }
+                }}
                 disabled={!isClickable}
                 className={`w-full text-left rounded-md border px-3 py-2 text-xs transition-colors ${
                   isActive

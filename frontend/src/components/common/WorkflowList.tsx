@@ -1,11 +1,12 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, FileText, Trash2, Copy, Edit2, Check, X } from 'lucide-react';
 import { Workflow } from '../../types/workflow';
 
 interface WorkflowListProps {
   workflows: Workflow[];
   selectedId: string | null;
-  onSelect: (workflow: Workflow) => void;
+  onSelect?: () => void; // Optional callback after navigation
   onCreate: (name: string) => void;
   onDelete: (id: string) => void;
   onDuplicate: (id: string, newName: string) => void;
@@ -21,6 +22,7 @@ export function WorkflowList({
   onDuplicate,
   onRename,
 }: WorkflowListProps) {
+  const navigate = useNavigate();
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -122,7 +124,10 @@ export function WorkflowList({
                       : 'hover:bg-gray-100 dark:hover:bg-gray-800 border border-transparent'
                   }
                 `}
-                onClick={() => onSelect(workflow)}
+                onClick={() => {
+                  navigate(`/workflows/${workflow.id}`);
+                  onSelect?.();
+                }}
               >
                 <FileText
                   size={16}
