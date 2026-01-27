@@ -36,9 +36,7 @@ interface WorkflowExecutionPageProps {
   onReplayExecution?: (
     workflowId: string,
     sourceExecutionId: string,
-    fromNodeId: string,
-    useOriginalInput: boolean,
-    input?: string
+    fromNodeId: string
   ) => void;
 }
 

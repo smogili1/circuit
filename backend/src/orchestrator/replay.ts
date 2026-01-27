@@ -237,7 +237,7 @@ export function computeInactiveBranchNodes(
   checkpoint: CheckpointState,
   replayNodeIds: Set<string>
 ): Set<string> {
-  const inactiveNodes = new Set<string>();
+  const potentiallyInactiveNodes = new Set<string>();
 
   for (const node of workflow.nodes) {
     if (replayNodeIds.has(node.id)) continue;
@@ -259,8 +259,21 @@ export function computeInactiveBranchNodes(
       if (!edge.sourceHandle) continue;
       if (edge.sourceHandle === activeHandle) continue;
       for (const targetId of getReachableFrom(edge.target, workflow.edges)) {
-        inactiveNodes.add(targetId);
+        potentiallyInactiveNodes.add(targetId);
       }
+    }
+  }
+
+  // Filter out nodes that actually executed - they're not truly inactive
+  // A node that completed or errored was on an active path (even if it's also reachable from inactive branches)
+  // Nodes that were 'skipped' or 'pending' ARE on inactive branches
+  const inactiveNodes = new Set<string>();
+  for (const nodeId of potentiallyInactiveNodes) {
+    const state = checkpoint.nodeStates[nodeId];
+    // Mark as inactive if the node was skipped, pending, or doesn't exist in checkpoint
+    // Don't mark as inactive if it completed or errored (those actually executed)
+    if (!state || state.status === 'pending' || state.status === 'skipped') {
+      inactiveNodes.add(nodeId);
     }
   }
 
@@ -363,11 +376,11 @@ export function buildReplayInfo(
       }
     }
 
-    // If the node itself has failed/errored, it's not replayable
-    // Pending nodes are still replayable (they just haven't been executed yet)
-    if (replayable && state && (state.status === 'error' || state.status === 'running')) {
+    // Nodes with error status ARE replayable - that's the point of retry
+    // Only running nodes cannot be replayed (execution in progress)
+    if (replayable && state && state.status === 'running') {
       replayable = false;
-      reason = 'Missing completed upstream dependency';
+      reason = 'Node execution is in progress';
     }
 
     if (replayable && inactiveNodeIds.has(node.id)) {

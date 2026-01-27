@@ -9,7 +9,7 @@ interface ReplayModalProps {
   executionId: string;
   originalInput: string;
   onClose: () => void;
-  onReplay: (fromNodeId: string, useOriginalInput: boolean, input?: string) => void;
+  onReplay: (fromNodeId: string) => void;
 }
 
 export function ReplayModal({
@@ -23,8 +23,6 @@ export function ReplayModal({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [useOriginalInput, setUseOriginalInput] = useState(true);
-  const [customInput, setCustomInput] = useState(originalInput);
 
   // Lock body scroll when modal is open
   useEffect(() => {
@@ -67,11 +65,7 @@ export function ReplayModal({
 
   const handleReplay = () => {
     if (!selectedNodeId) return;
-    onReplay(
-      selectedNodeId,
-      useOriginalInput,
-      useOriginalInput ? undefined : customInput
-    );
+    onReplay(selectedNodeId);
     onClose();
   };
 
@@ -139,74 +133,18 @@ export function ReplayModal({
                 />
               )}
 
-              {/* Input Configuration */}
-              {!replayInfo.isReplayBlocked && selectedNodeId && (
+              {/* Original Input Preview */}
+              {!replayInfo.isReplayBlocked && selectedNodeId && originalInput && (
                 <div className="space-y-3">
                   <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Input Configuration
+                    Original Input
                   </h3>
-                  <div className="space-y-2">
-                    <label className="flex items-start gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
-                      <input
-                        type="radio"
-                        checked={useOriginalInput}
-                        onChange={() => setUseOriginalInput(true)}
-                        className="mt-0.5"
-                      />
-                      <div className="flex-1">
-                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          Use original input
-                        </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          Use the same input from the original execution
-                        </div>
-                      </div>
-                    </label>
-                    <label className="flex items-start gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
-                      <input
-                        type="radio"
-                        checked={!useOriginalInput}
-                        onChange={() => setUseOriginalInput(false)}
-                        className="mt-0.5"
-                      />
-                      <div className="flex-1">
-                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          Provide custom input
-                        </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          Modify the input before replaying
-                        </div>
-                      </div>
-                    </label>
+                  <div className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 text-sm font-mono text-gray-700 dark:text-gray-300 max-h-32 overflow-y-auto">
+                    {originalInput}
                   </div>
-
-                  {!useOriginalInput && (
-                    <div className="mt-3">
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Custom Input
-                      </label>
-                      <textarea
-                        value={customInput}
-                        onChange={(e) => setCustomInput(e.target.value)}
-                        rows={6}
-                        placeholder="Enter custom input..."
-                        className="w-full px-3 py-2 border rounded-lg text-sm font-mono
-                          dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100
-                          focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                  )}
-
-                  {useOriginalInput && originalInput && (
-                    <div className="mt-3">
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Original Input (Preview)
-                      </label>
-                      <div className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 text-sm font-mono text-gray-700 dark:text-gray-300 max-h-32 overflow-y-auto">
-                        {originalInput}
-                      </div>
-                    </div>
-                  )}
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Replay will use the original input. Any node configuration changes will be applied.
+                  </p>
                 </div>
               )}
             </>

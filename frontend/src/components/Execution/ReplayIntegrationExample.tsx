@@ -20,9 +20,7 @@ interface ExampleIntegrationProps {
   onReplayExecution: (
     workflowId: string,
     sourceExecutionId: string,
-    fromNodeId: string,
-    useOriginalInput: boolean,
-    input?: string
+    fromNodeId: string
   ) => void;
 }
 
@@ -65,15 +63,13 @@ export function ExampleIntegration({
   };
 
   // Handler for when user confirms replay in the modal
-  const handleReplay = (fromNodeId: string, useOriginalInput: boolean, input?: string) => {
+  const handleReplay = (fromNodeId: string) => {
     if (!workflowId || !replayModalState.executionId) return;
 
     onReplayExecution(
       workflowId,
       replayModalState.executionId,
-      fromNodeId,
-      useOriginalInput,
-      input
+      fromNodeId
     );
   };
 

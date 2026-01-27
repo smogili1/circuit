@@ -349,9 +349,7 @@ io.on('connection', async (socket: Socket) => {
           socket,
           event.workflowId,
           event.sourceExecutionId,
-          event.fromNodeId,
-          event.useOriginalInput,
-          event.input
+          event.fromNodeId
         );
         break;
 
@@ -504,9 +502,7 @@ async function handleReplayExecution(
   socket: Socket,
   workflowId: string,
   sourceExecutionId: string,
-  fromNodeId: string,
-  useOriginalInput?: boolean,
-  input?: string
+  fromNodeId: string
 ): Promise<void> {
   if (!fromNodeId) {
     socket.emit('event', {
@@ -579,21 +575,8 @@ async function handleReplayExecution(
     return;
   }
 
-  let replayInput = summary.input;
-  if (useOriginalInput === false) {
-    if (input === undefined) {
-      socket.emit('event', {
-        type: 'execution-error',
-        error: 'Replay input is required when not using the original input',
-      } as ExecutionEvent);
-      return;
-    }
-    replayInput = input;
-  } else if (useOriginalInput === true) {
-    replayInput = summary.input;
-  } else if (input !== undefined) {
-    replayInput = input;
-  }
+  // Always use original input - node configuration changes are still applied
+  const replayInput = summary.input;
 
   const engine = new DAGExecutionEngine(workflow, workflow.workingDirectory);
   const executionId = engine.getContext().executionId;

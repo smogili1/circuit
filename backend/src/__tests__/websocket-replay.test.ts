@@ -396,7 +396,7 @@ describe('WebSocket replay-execution', () => {
     expect(replayPlan.errors.some((e) => e.type === 'inactive-branch')).toBe(true);
   });
 
-  it('uses original input when useOriginalInput=true', async () => {
+  it('always uses original input for replay', async () => {
     const workflow = createMockWorkflow(['Input', 'A', 'B']);
     const checkpoint = createMockCheckpoint(
       {
@@ -423,79 +423,11 @@ describe('WebSocket replay-execution', () => {
     (readExecutionCheckpoint as jest.Mock).mockResolvedValue(checkpoint);
 
     const summary = await readExecutionSummary('test-workflow', 'source-exec');
-    const useOriginalInput = true;
-    const providedInput = 'new input';
 
-    // Simulate input logic from handleReplayExecution
-    let replayInput = summary!.input;
-    if (useOriginalInput === true) {
-      replayInput = summary!.input;
-    } else if (providedInput !== undefined) {
-      replayInput = providedInput;
-    }
+    // Replay always uses original input - node configuration changes are still applied
+    const replayInput = summary!.input;
 
     expect(replayInput).toBe('original input');
-  });
-
-  it('uses new input when useOriginalInput=false', async () => {
-    (readExecutionSummary as jest.Mock).mockResolvedValue({
-      executionId: 'source-exec',
-      input: 'original input',
-    });
-
-    const summary = await readExecutionSummary('test-workflow', 'source-exec');
-    const useOriginalInput = false;
-    const providedInput = 'new input';
-
-    let replayInput = summary!.input;
-    if (useOriginalInput === false) {
-      if (providedInput === undefined) {
-        throw new Error('Replay input is required when not using the original input');
-      }
-      replayInput = providedInput;
-    }
-
-    expect(replayInput).toBe('new input');
-  });
-
-  it('requires input when useOriginalInput=false and no input provided', async () => {
-    (readExecutionSummary as jest.Mock).mockResolvedValue({
-      executionId: 'source-exec',
-      input: 'original input',
-    });
-
-    const summary = await readExecutionSummary('test-workflow', 'source-exec');
-    const useOriginalInput = false;
-    const providedInput = undefined;
-
-    expect(() => {
-      if (useOriginalInput === false && providedInput === undefined) {
-        throw new Error('Replay input is required when not using the original input');
-      }
-    }).toThrow('Replay input is required');
-  });
-
-  it('defaults to original input when useOriginalInput is undefined', async () => {
-    (readExecutionSummary as jest.Mock).mockResolvedValue({
-      executionId: 'source-exec',
-      input: 'original input',
-    });
-
-    const summary = await readExecutionSummary('test-workflow', 'source-exec');
-    const useOriginalInput = undefined;
-    const providedInput = 'new input';
-
-    // Simulate logic from handleReplayExecution
-    let replayInput = summary!.input;
-    if (useOriginalInput === false) {
-      replayInput = providedInput!;
-    } else if (useOriginalInput === true) {
-      replayInput = summary!.input;
-    } else if (providedInput !== undefined) {
-      replayInput = providedInput;
-    }
-
-    expect(replayInput).toBe('new input');
   });
 
   it('returns error when checkpoint missing', async () => {

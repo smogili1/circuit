@@ -185,11 +185,12 @@ describe('buildReplayInfo', () => {
       nodeId: 'A',
       replayable: true,
     });
+    // B is replayable because its ancestor (A) completed - you can retry from B
     expect(result.checkpoints[1]).toMatchObject({
       nodeId: 'B',
-      replayable: false,
-      reason: 'Missing completed upstream dependency',
+      replayable: true,
     });
+    // C is NOT replayable because its ancestor (B) has error status (no cached output)
     expect(result.checkpoints[2]).toMatchObject({
       nodeId: 'C',
       replayable: false,

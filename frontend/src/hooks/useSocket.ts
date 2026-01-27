@@ -567,21 +567,16 @@ export function useSocket() {
   const replayExecution = useCallback((
     workflowId: string,
     sourceExecutionId: string,
-    fromNodeId: string,
-    useOriginalInput: boolean,
-    input?: string
+    fromNodeId: string
   ) => {
     console.log('[useSocket] Starting replay:', {
       workflowId,
       sourceExecutionId,
-      fromNodeId,
-      useOriginalInput,
-      input: input?.slice(0, 100)
+      fromNodeId
     });
     recoveryCompleteRef.current = false;
     setExecution(prev => ({
       ...prev,
-      submittedInput: useOriginalInput ? prev.submittedInput : (input || null),
       workflowId
     }));
     const event: ControlEvent = {
@@ -589,8 +584,6 @@ export function useSocket() {
       workflowId,
       sourceExecutionId,
       fromNodeId,
-      useOriginalInput,
-      input,
     };
     socketRef.current?.emit('control', event);
   }, []);

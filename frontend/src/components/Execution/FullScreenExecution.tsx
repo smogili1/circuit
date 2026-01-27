@@ -38,9 +38,7 @@ interface FullScreenExecutionProps {
   onReplayExecution?: (
     workflowId: string,
     sourceExecutionId: string,
-    fromNodeId: string,
-    useOriginalInput: boolean,
-    input?: string
+    fromNodeId: string
   ) => void;
 }
 
@@ -115,15 +113,13 @@ function FullScreenExecutionComponent({
     });
   };
 
-  const handleReplay = (fromNodeId: string, useOriginalInput: boolean, input?: string) => {
+  const handleReplay = (fromNodeId: string) => {
     if (!workflow?.id || !replayModalState.executionId || !onReplayExecution) return;
 
     onReplayExecution(
       workflow.id,
       replayModalState.executionId,
-      fromNodeId,
-      useOriginalInput,
-      input
+      fromNodeId
     );
     handleCloseReplayModal();
   };

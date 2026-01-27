@@ -298,8 +298,6 @@ export type ControlEvent =
       workflowId: string;
       sourceExecutionId: string;
       fromNodeId: string;
-      useOriginalInput?: boolean;
-      input?: string;
     }
   | { type: 'submit-approval'; executionId: string; nodeId: string; response: ApprovalResponse };
 

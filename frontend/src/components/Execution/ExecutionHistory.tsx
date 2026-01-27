@@ -114,9 +114,26 @@ export function ExecutionHistory({
                     <div className="font-medium text-gray-800 dark:text-gray-100">
                       {formatTimestamp(execution.startedAt)}
                     </div>
-                    <span className={`px-2 py-0.5 rounded ${statusClass}`}>
-                      {execution.status}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded ${statusClass}`}>
+                        {execution.status}
+                      </span>
+                      {canRetry && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (workflowId) {
+                              onRetry(workflowId, execution.executionId, execution.input);
+                            }
+                          }}
+                          title="Retry from step"
+                          className="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400
+                            hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
+                        >
+                          <RotateCcw size={14} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="mt-1 text-gray-600 dark:text-gray-400">
                     Duration: {formatDuration(execution.startedAt, execution.completedAt)}
@@ -132,23 +149,6 @@ export function ExecutionHistory({
                     </div>
                   )}
                 </button>
-                {canRetry && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (workflowId) {
-                        onRetry(workflowId, execution.executionId, execution.input);
-                      }
-                    }}
-                    className="mt-2 w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium
-                      text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20
-                      hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded border border-blue-200 dark:border-blue-800
-                      transition-colors"
-                  >
-                    <RotateCcw size={12} />
-                    Retry from...
-                  </button>
-                )}
               </div>
             );
           })}
