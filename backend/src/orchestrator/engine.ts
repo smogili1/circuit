@@ -236,6 +236,22 @@ export class DAGExecutionEngine extends EventEmitter {
   }
 
   /**
+   * Get the output of a specific node by its name or ID.
+   */
+  getNodeOutput(nodeNameOrId: string): unknown {
+    // Try as node ID first
+    if (this.context.nodeOutputs.has(nodeNameOrId)) {
+      return this.context.nodeOutputs.get(nodeNameOrId);
+    }
+    // Try as node name
+    const nodeId = this.nodeNameToId.get(nodeNameOrId);
+    if (nodeId) {
+      return this.context.nodeOutputs.get(nodeId);
+    }
+    return undefined;
+  }
+
+  /**
    * Get nodes that are ready to execute (all predecessors complete).
    */
   private getReadyNodes(): WorkflowNode[] {

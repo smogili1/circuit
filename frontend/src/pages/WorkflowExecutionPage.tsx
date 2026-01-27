@@ -33,6 +33,13 @@ interface WorkflowExecutionPageProps {
   onReset: () => void;
   onRefreshHistory: (workflowId: string) => void;
   onLoadHistory: (workflowId: string, executionId: string) => void;
+  onReplayExecution?: (
+    workflowId: string,
+    sourceExecutionId: string,
+    fromNodeId: string,
+    useOriginalInput: boolean,
+    input?: string
+  ) => void;
 }
 
 export function WorkflowExecutionPage({
@@ -52,6 +59,7 @@ export function WorkflowExecutionPage({
   onReset,
   onRefreshHistory,
   onLoadHistory,
+  onReplayExecution,
 }: WorkflowExecutionPageProps) {
   const { workflow } = useWorkflowStore();
 
@@ -81,6 +89,7 @@ export function WorkflowExecutionPage({
       onReset={onReset}
       onRefreshHistory={onRefreshHistory}
       onLoadHistory={onLoadHistory}
+      onReplayExecution={onReplayExecution}
     />
   );
 }

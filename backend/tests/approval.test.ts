@@ -97,6 +97,19 @@ function createMockContext(options: {
       }
       return `{{${ref}}}`;
     }),
+    resolveReference: (reference: string) => {
+      const cleanRef = reference.replace(/^\{\{|\}\}$/g, '');
+      const [nodeName, field] = cleanRef.split('.');
+      const nodeId = nodeNameToId.get(nodeName);
+      if (nodeId) {
+        const output = nodeOutputs.get(nodeId);
+        if (output && typeof output === 'object' && field in output) {
+          return (output as Record<string, unknown>)[field];
+        }
+        return output;
+      }
+      return undefined;
+    },
     setVariable: (key: string, value: unknown) => variables.set(key, value),
     getVariable: (key: string) => variables.get(key),
     getWorkingDirectory: () => '/tmp',

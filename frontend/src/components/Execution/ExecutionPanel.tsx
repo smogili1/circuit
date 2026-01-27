@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Play, Square, RefreshCw, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { AgentEvent, NodeStatus, ExecutionSummary } from '../../types/workflow';
 import { ExecutionHistory } from './ExecutionHistory';
+import { ReplayModal } from './ReplayModal';
 
 interface GroupedEvent {
   event: AgentEvent;
@@ -64,6 +65,13 @@ interface ExecutionPanelProps {
   onReset: () => void;
   onRefreshHistory: (workflowId: string) => void;
   onLoadHistory: (workflowId: string, executionId: string) => void;
+  onReplayExecution?: (
+    workflowId: string,
+    sourceExecutionId: string,
+    fromNodeId: string,
+    useOriginalInput: boolean,
+    input?: string
+  ) => void;
 }
 
 export function ExecutionPanel({
@@ -79,9 +87,19 @@ export function ExecutionPanel({
   onReset,
   onRefreshHistory,
   onLoadHistory,
+  onReplayExecution,
 }: ExecutionPanelProps) {
   const [input, setInput] = useState('');
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [replayModalState, setReplayModalState] = useState<{
+    isOpen: boolean;
+    executionId: string | null;
+    input: string;
+  }>({
+    isOpen: false,
+    executionId: null,
+    input: '',
+  });
 
   const toggleNode = (nodeId: string) => {
     const next = new Set(expandedNodes);
@@ -103,6 +121,35 @@ export function ExecutionPanel({
     if (executionId) {
       onInterrupt(executionId);
     }
+  };
+
+  const handleOpenReplayModal = (workflowId: string, executionId: string, input: string) => {
+    setReplayModalState({
+      isOpen: true,
+      executionId,
+      input,
+    });
+  };
+
+  const handleCloseReplayModal = () => {
+    setReplayModalState({
+      isOpen: false,
+      executionId: null,
+      input: '',
+    });
+  };
+
+  const handleReplay = (fromNodeId: string, useOriginalInput: boolean, input?: string) => {
+    if (!workflowId || !replayModalState.executionId || !onReplayExecution) return;
+
+    onReplayExecution(
+      workflowId,
+      replayModalState.executionId,
+      fromNodeId,
+      useOriginalInput,
+      input
+    );
+    handleCloseReplayModal();
   };
 
   // Refresh history when workflow changes, execution completes, or a new execution starts
@@ -179,7 +226,19 @@ export function ExecutionPanel({
         isRunning={isRunning}
         onRefresh={onRefreshHistory}
         onLoad={onLoadHistory}
+        onRetry={onReplayExecution ? handleOpenReplayModal : undefined}
       />
+
+      {/* Replay Modal */}
+      {replayModalState.isOpen && workflowId && replayModalState.executionId && (
+        <ReplayModal
+          workflowId={workflowId}
+          executionId={replayModalState.executionId}
+          originalInput={replayModalState.input}
+          onClose={handleCloseReplayModal}
+          onReplay={handleReplay}
+        />
+      )}
 
       {/* Node Outputs */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">

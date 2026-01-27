@@ -281,6 +281,14 @@ export interface ReplayInfo {
   checkpoints: ReplayCheckpoint[];
   warnings: ReplayWarning[];
   errors: ReplayError[];
+  isReplayBlocked: boolean;
+}
+
+export interface ReplayValidationResult {
+  isBlocked: boolean;
+  blockingReasons: string[];
+  warnings: string[];
+  replayableNodeIds: string[];
 }
 
 // =============================================================================

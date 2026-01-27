@@ -4,6 +4,7 @@ import { ExecutionWorkflowView } from './ExecutionWorkflowView';
 import { LogViewer } from './LogViewer';
 import { ExecutionControls } from './ExecutionControls';
 import { ExecutionHistory } from './ExecutionHistory';
+import { ReplayModal } from './ReplayModal';
 import { BranchPath } from './BranchIndicator';
 
 interface NodeOutput {
@@ -34,6 +35,13 @@ interface FullScreenExecutionProps {
   onReset: () => void;
   onRefreshHistory: (workflowId: string) => void;
   onLoadHistory: (workflowId: string, executionId: string) => void;
+  onReplayExecution?: (
+    workflowId: string,
+    sourceExecutionId: string,
+    fromNodeId: string,
+    useOriginalInput: boolean,
+    input?: string
+  ) => void;
 }
 
 function FullScreenExecutionComponent({
@@ -53,9 +61,19 @@ function FullScreenExecutionComponent({
   onReset,
   onRefreshHistory,
   onLoadHistory,
+  onReplayExecution,
 }: FullScreenExecutionProps) {
   const [input, setInput] = useState('');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [replayModalState, setReplayModalState] = useState<{
+    isOpen: boolean;
+    executionId: string | null;
+    input: string;
+  }>({
+    isOpen: false,
+    executionId: null,
+    input: '',
+  });
 
   // Build node types map from workflow if not provided
   const resolvedNodeTypes = useMemo(() => {
@@ -79,6 +97,35 @@ function FullScreenExecutionComponent({
     if (executionId) {
       onInterrupt(executionId);
     }
+  };
+
+  const handleOpenReplayModal = (workflowId: string, executionId: string, input: string) => {
+    setReplayModalState({
+      isOpen: true,
+      executionId,
+      input,
+    });
+  };
+
+  const handleCloseReplayModal = () => {
+    setReplayModalState({
+      isOpen: false,
+      executionId: null,
+      input: '',
+    });
+  };
+
+  const handleReplay = (fromNodeId: string, useOriginalInput: boolean, input?: string) => {
+    if (!workflow?.id || !replayModalState.executionId || !onReplayExecution) return;
+
+    onReplayExecution(
+      workflow.id,
+      replayModalState.executionId,
+      fromNodeId,
+      useOriginalInput,
+      input
+    );
+    handleCloseReplayModal();
   };
 
   if (!workflow) {
@@ -107,6 +154,7 @@ function FullScreenExecutionComponent({
             isRunning={isRunning}
             onRefresh={onRefreshHistory}
             onLoad={onLoadHistory}
+            onRetry={onReplayExecution ? handleOpenReplayModal : undefined}
           />
         </div>
 
@@ -148,6 +196,17 @@ function FullScreenExecutionComponent({
           />
         </div>
       </div>
+
+      {/* Replay Modal */}
+      {replayModalState.isOpen && workflow?.id && replayModalState.executionId && (
+        <ReplayModal
+          workflowId={workflow.id}
+          executionId={replayModalState.executionId}
+          originalInput={replayModalState.input}
+          onClose={handleCloseReplayModal}
+          onReplay={handleReplay}
+        />
+      )}
     </div>
   );
 }
