@@ -26,6 +26,8 @@ nodes:
         - Glob
         - Grep
         - Bash
+        - WebFetch
+        - WebSearch
       systemPrompt: |
         You are a senior software architect creating implementation plans.
         Analyze the codebase thoroughly before creating your plan.
@@ -144,7 +146,7 @@ nodes:
       name: Backend Developer
       model: gpt-5.2-codex
       approvalPolicy: never
-      sandbox: workspace-write
+      sandbox: danger-full-access
       userQuery: |
         Implement the backend according to the approved plan.
 
@@ -1199,4 +1201,4 @@ edges:
     source: merge-results
     target: output-final
 createdAt: '2026-01-24T22:00:00.000Z'
-updatedAt: '2026-01-26T08:01:30.524Z'
+updatedAt: '2026-01-27T02:49:32.017Z'
