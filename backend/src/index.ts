@@ -311,14 +311,8 @@ io.on('connection', async (socket: Socket) => {
         break;
 
       case 'replay-execution':
-        await handleReplayExecution(
-          socket,
-          event.workflowId,
-          event.sourceExecutionId,
-          event.fromNodeId,
-          event.useOriginalInput,
-          event.input
-        );
+        //TODO: Implement replay functionality
+        console.log('Replay not yet implemented');
         break;
 
       case 'submit-approval':

@@ -680,6 +680,57 @@ export class DAGExecutionEngine extends EventEmitter {
   }
 
   /**
+   * Mark unreachable pending nodes as skipped.
+   * A pending node is unreachable if all its predecessors are in a terminal state
+   * (complete, error, skipped) but none are complete (so it can't execute).
+   * This handles cases where skip propagation was blocked by multiple predecessors.
+   * @returns true if any nodes were marked as skipped
+   */
+  private markUnreachableNodesAsSkipped(pendingNodeIds: string[]): boolean {
+    let markedAny = false;
+
+    for (const nodeId of pendingNodeIds) {
+      const state = this.nodeStates.get(nodeId);
+      if (state?.status !== 'pending') continue;
+
+      const predecessorIds = this.getPredecessorIds(nodeId);
+
+      // Check if all predecessors are in a terminal state
+      const allPredecessorsTerminal = predecessorIds.every((predId) => {
+        const predState = this.nodeStates.get(predId);
+        return (
+          predState?.status === 'complete' ||
+          predState?.status === 'error' ||
+          predState?.status === 'skipped'
+        );
+      });
+
+      // Check if at least one predecessor is complete (would make node ready)
+      const hasCompletePredecessor = predecessorIds.some((predId) => {
+        const predState = this.nodeStates.get(predId);
+        return predState?.status === 'complete';
+      });
+
+      // If all predecessors are terminal but none are complete,
+      // this node is unreachable and should be skipped
+      if (allPredecessorsTerminal && !hasCompletePredecessor) {
+        console.log(`[Engine] Marking unreachable node ${nodeId} as skipped`);
+        this.updateNodeState(nodeId, 'skipped');
+
+        this.emit('event', {
+          type: 'node-complete',
+          nodeId,
+          result: null,
+        } as ExecutionEvent);
+
+        markedAny = true;
+      }
+    }
+
+    return markedAny;
+  }
+
+  /**
    * Skip a node and all its successors.
    * Only skips a node if ALL its predecessors are skipped (no active input paths).
    * @param nodeId - The node to skip
@@ -731,10 +782,10 @@ export class DAGExecutionEngine extends EventEmitter {
       result: null,
     } as ExecutionEvent);
 
-    // Recursively skip successors
+    // Recursively skip successors - pass the current node as the predecessor triggering the skip
     const successorIds = this.getSuccessorIds(nodeId);
     for (const successorId of successorIds) {
-      this.skipNode(successorId);
+      this.skipNode(successorId, nodeId);
     }
   }
 
@@ -830,12 +881,22 @@ export class DAGExecutionEngine extends EventEmitter {
             continue;
           }
 
-          // If there are pending nodes but none ready, we might have a cycle
-          const hasPending = Array.from(this.nodeStates.values()).some(
-            (state) => state.status === 'pending'
-          );
+          // If there are pending nodes but none ready, check if they're unreachable
+          // (on branches that were skipped but couldn't propagate due to multiple predecessors)
+          const pendingNodeIds = Array.from(this.nodeStates.entries())
+            .filter(([, state]) => state.status === 'pending')
+            .map(([id]) => id);
 
-          if (hasPending) {
+          if (pendingNodeIds.length > 0) {
+            // Mark unreachable pending nodes as skipped
+            const markedAny = this.markUnreachableNodesAsSkipped(pendingNodeIds);
+
+            if (markedAny) {
+              // Some nodes were marked as skipped, continue the loop to check for newly ready nodes
+              continue;
+            }
+
+            // No nodes could be marked as skipped - this is a real cycle
             throw new ExecutionError({
               code: ErrorCodes.CYCLE_DETECTED,
               message: 'Workflow has a cycle or unsatisfied dependencies',

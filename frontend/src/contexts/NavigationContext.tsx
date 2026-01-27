@@ -25,6 +25,15 @@ export function useNavigation() {
 }
 
 /**
+ * Extract workflowId from URL path
+ * Matches patterns like /workflows/{workflowId} or /workflows/{workflowId}/executions
+ */
+function extractWorkflowIdFromPath(pathname: string): string | null {
+  const match = pathname.match(/^\/workflows\/([^/]+)/);
+  return match ? match[1] : null;
+}
+
+/**
  * Hook to create navigation context value using React Router
  */
 export function useNavigationValue(workflowId: string | null): NavigationContextValue {
@@ -39,7 +48,10 @@ export function useNavigationValue(workflowId: string | null): NavigationContext
     : 'design';
 
   const navigateTo = (page: AppPage, targetWorkflowId?: string) => {
-    const id = targetWorkflowId || workflowId;
+    // Read current pathname at click time to ensure we get the latest URL
+    // This is needed because useParams doesn't work for components outside Route elements
+    const currentPathWorkflowId = extractWorkflowIdFromPath(window.location.pathname);
+    const id = targetWorkflowId || workflowId || currentPathWorkflowId;
 
     switch (page) {
       case 'design':
