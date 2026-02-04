@@ -89,7 +89,7 @@ export function ExecutionHistory({
             // Allow clicking to view any execution, even while another is running
             const isClickable = !!workflowId;
 
-            const canRetry = onRetry && (execution.status === 'complete' || execution.status === 'error');
+            const canRetry = onRetry && (execution.status === 'complete' || execution.status === 'error' || execution.status === 'interrupted');
 
             return (
               <div

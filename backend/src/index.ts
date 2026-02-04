@@ -415,7 +415,9 @@ function attachExecutionEventHandlers(
           }
         }
 
-        if (event.type === 'execution-complete') {
+        // Save checkpoint on node completion (not just execution completion)
+        // This enables replay from interrupted executions
+        if (event.type === 'node-complete' || event.type === 'execution-complete') {
           const checkpoint = buildCheckpointState(
             engine.getNodeStates(),
             engine.getContext().nodeOutputs,
