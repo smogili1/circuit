@@ -13,6 +13,7 @@ import { outputExecutor } from './output.js';
 import { approvalExecutor } from './approval.js';
 import { javascriptExecutor } from './javascript.js';
 import { bashExecutor } from './bash.js';
+import { selfReflectExecutor } from './self-reflect.js';
 
 // Register all built-in executors
 executorRegistry
@@ -24,7 +25,8 @@ executorRegistry
   .register(outputExecutor)
   .register(approvalExecutor)
   .register(javascriptExecutor)
-  .register(bashExecutor);
+  .register(bashExecutor)
+  .register(selfReflectExecutor);
 
 // Export everything
 export { executorRegistry } from './registry.js';
@@ -41,3 +43,9 @@ export { outputExecutor } from './output.js';
 export { approvalExecutor, submitApproval, cancelApproval, cancelAllApprovals } from './approval.js';
 export { javascriptExecutor } from './javascript.js';
 export { bashExecutor } from './bash.js';
+export {
+  selfReflectExecutor,
+  submitEvolutionApproval,
+  cancelEvolutionApproval,
+  cancelAllEvolutionApprovals,
+} from './self-reflect.js';

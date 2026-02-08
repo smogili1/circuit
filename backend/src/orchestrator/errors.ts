@@ -32,6 +32,10 @@ export const ErrorCodes = {
   // Condition errors
   INVALID_CONDITION_TYPE: 'INVALID_CONDITION_TYPE',
   CONDITION_EVALUATION_FAILED: 'CONDITION_EVALUATION_FAILED',
+
+  // Evolution errors
+  EVOLUTION_VALIDATION_FAILED: 'EVOLUTION_VALIDATION_FAILED',
+  EVOLUTION_APPLY_FAILED: 'EVOLUTION_APPLY_FAILED',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

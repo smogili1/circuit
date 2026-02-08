@@ -12,6 +12,8 @@ import {
   ApprovalRequest,
   ApprovalResponse,
   WorkflowValidationError,
+  EvolutionRequest,
+  EvolutionResponse,
 } from '../types/workflow';
 
 interface NodeOutput {
@@ -46,6 +48,7 @@ interface ExecutionState {
   branchResults: Map<string, boolean>;
   finalResult: unknown | null;
   pendingApproval: ApprovalRequest | null;
+  pendingEvolution: EvolutionRequest | null;
   validationErrors: WorkflowValidationError[] | null;
   lastEventTimestamp: string | null;
 }
@@ -75,6 +78,7 @@ const buildEmptyExecutionState = (): ExecutionState => ({
   branchResults: new Map(),
   finalResult: null,
   pendingApproval: null,
+  pendingEvolution: null,
   validationErrors: null,
   lastEventTimestamp: null,
 });
@@ -266,6 +270,7 @@ export function useSocket() {
         branchResults,
         finalResult,
         pendingApproval: null,
+        pendingEvolution: null,
         validationErrors: null,
         lastEventTimestamp,
       };
@@ -298,6 +303,7 @@ export function useSocket() {
             branchResults: new Map(),
             finalResult: null,
             pendingApproval: null,
+            pendingEvolution: null,
             validationErrors: null,
             lastEventTimestamp: timestamp,
           };
@@ -334,6 +340,15 @@ export function useSocket() {
             lastEventTimestamp: timestamp,
           };
 
+        case 'node-evolution':
+          newNodeStates.set(event.nodeId, 'waiting');
+          return {
+            ...prev,
+            nodeStates: newNodeStates,
+            pendingEvolution: event.evolution,
+            lastEventTimestamp: timestamp,
+          };
+
         case 'node-complete': {
           newNodeStates.set(event.nodeId, 'complete');
           const nodeOutput = newNodeOutputs.get(event.nodeId);
@@ -354,6 +369,7 @@ export function useSocket() {
             });
           }
           const clearApproval = prev.pendingApproval?.nodeId === event.nodeId;
+          const clearEvolution = prev.pendingEvolution?.nodeId === event.nodeId;
           return {
             ...prev,
             nodeStates: newNodeStates,
@@ -361,6 +377,7 @@ export function useSocket() {
             branchResults: newBranchResults,
             branchPaths: newBranchPaths,
             pendingApproval: clearApproval ? null : prev.pendingApproval,
+            pendingEvolution: clearEvolution ? null : prev.pendingEvolution,
             lastEventTimestamp: timestamp,
           };
         }
@@ -376,11 +393,13 @@ export function useSocket() {
             });
           }
           const clearApprovalErr = prev.pendingApproval?.nodeId === event.nodeId;
+          const clearEvolutionErr = prev.pendingEvolution?.nodeId === event.nodeId;
           return {
             ...prev,
             nodeStates: newNodeStates,
             nodeOutputs: newNodeOutputs,
             pendingApproval: clearApprovalErr ? null : prev.pendingApproval,
+            pendingEvolution: clearEvolutionErr ? null : prev.pendingEvolution,
             lastEventTimestamp: timestamp,
           };
         }
@@ -391,6 +410,7 @@ export function useSocket() {
             isRunning: false,
             finalResult: event.result,
             pendingApproval: null,
+            pendingEvolution: null,
             lastEventTimestamp: timestamp,
           };
 
@@ -400,6 +420,7 @@ export function useSocket() {
             isRunning: false,
             finalResult: { error: event.error },
             pendingApproval: null,
+            pendingEvolution: null,
             lastEventTimestamp: timestamp,
           };
 
@@ -560,6 +581,17 @@ export function useSocket() {
     socketRef.current?.emit('control', event);
   }, [execution.executionId]);
 
+  const submitEvolution = useCallback((nodeId: string, response: EvolutionResponse) => {
+    if (!execution.executionId) return;
+    const event: ControlEvent = {
+      type: 'submit-evolution-approval',
+      executionId: execution.executionId,
+      nodeId,
+      response,
+    };
+    socketRef.current?.emit('control', event);
+  }, [execution.executionId]);
+
   const clearValidationErrors = useCallback(() => {
     setExecution(prev => ({ ...prev, validationErrors: null }));
   }, []);
@@ -600,6 +632,7 @@ export function useSocket() {
     interruptExecution,
     resetExecution,
     submitApproval,
+    submitEvolution,
     clearValidationErrors,
     fetchExecutionHistory,
     loadExecutionHistory,

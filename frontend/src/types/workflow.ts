@@ -145,6 +145,62 @@ export interface RejectionHandlerConfig {
   onMaxRetries?: 'fail' | 'skip' | 'approve-anyway';
 }
 
+export type EvolutionScope =
+  | 'prompts'
+  | 'models'
+  | 'tools'
+  | 'nodes'
+  | 'edges'
+  | 'parameters';
+
+export type EvolutionMode = 'suggest' | 'auto-apply' | 'dry-run';
+
+export type MutationOp =
+  | { op: 'update-node-config'; nodeId: string; path: string; value: unknown }
+  | { op: 'update-prompt'; nodeId: string; field: string; newValue: string }
+  | { op: 'update-model'; nodeId: string; newModel: string }
+  | { op: 'add-node'; node: WorkflowNode; connectFrom?: string; connectTo?: string }
+  | { op: 'remove-node'; nodeId: string }
+  | { op: 'add-edge'; edge: WorkflowEdge }
+  | { op: 'remove-edge'; edgeId: string }
+  | { op: 'update-workflow-setting'; field: string; value: unknown };
+
+export interface WorkflowEvolution {
+  reasoning: string;
+  mutations: MutationOp[];
+  expectedImpact: string;
+  riskAssessment: string;
+  rollbackPlan?: string;
+}
+
+export interface EvolutionRequest {
+  nodeId: string;
+  nodeName: string;
+  evolution: WorkflowEvolution;
+  validationErrors: string[];
+  beforeSnapshot: Workflow;
+  afterPreview: Workflow;
+}
+
+export interface EvolutionResponse {
+  approved: boolean;
+  feedback?: string;
+  respondedAt: string;
+}
+
+export interface SelfReflectNodeConfig {
+  type: 'self-reflect';
+  name: string;
+  reflectionPrompt?: string;
+  evolutionMode: EvolutionMode;
+  evolutionScopes?: EvolutionScope[];
+  agentProvider: 'claude' | 'openai';
+  model?: string;
+  maxMutations?: number;
+  includeExecutionLogs?: boolean;
+  requireApproval?: boolean;
+}
+
 // =============================================================================
 // Union Types
 // =============================================================================
@@ -157,7 +213,8 @@ export type NodeConfig =
   | ConditionNodeConfig
   | MergeNodeConfig
   | JavaScriptNodeConfig
-  | ApprovalNodeConfig;
+  | ApprovalNodeConfig
+  | SelfReflectNodeConfig;
 
 export type NodeType = NodeConfig['type'];
 
@@ -252,6 +309,7 @@ export type ExecutionEvent =
   | { type: 'node-complete'; nodeId: string; result: unknown }
   | { type: 'node-error'; nodeId: string; error: string }
   | { type: 'node-waiting'; nodeId: string; nodeName: string; approval: ApprovalRequest }
+  | { type: 'node-evolution'; nodeId: string; nodeName: string; evolution: EvolutionRequest }
   | { type: 'execution-complete'; result: unknown }
   | { type: 'execution-error'; error: string }
   | { type: 'validation-error'; errors: WorkflowValidationError[] };
@@ -299,7 +357,8 @@ export type ControlEvent =
       sourceExecutionId: string;
       fromNodeId: string;
     }
-  | { type: 'submit-approval'; executionId: string; nodeId: string; response: ApprovalResponse };
+  | { type: 'submit-approval'; executionId: string; nodeId: string; response: ApprovalResponse }
+  | { type: 'submit-evolution-approval'; executionId: string; nodeId: string; response: EvolutionResponse };
 
 // =============================================================================
 // Replay Types

@@ -3,6 +3,7 @@
 
 // Import types needed within this file
 import type { NodeConfig, NodeType } from '../schemas/nodes';
+import type { EvolutionMode, WorkflowEvolution } from '../orchestrator/evolution-types';
 
 // Re-export all node config types from schemas (single source of truth)
 export type {
@@ -17,6 +18,7 @@ export type {
   JavaScriptNodeConfig,
   ApprovalNodeConfig,
   BashNodeConfig,
+  SelfReflectNodeConfig,
   ConditionOperator,
   ConditionJoiner,
   ConditionRule,
@@ -155,6 +157,19 @@ export type ExecutionEvent =
   | { type: 'node-complete'; nodeId: string; result: unknown }
   | { type: 'node-error'; nodeId: string; error: string }
   | { type: 'node-waiting'; nodeId: string; nodeName: string; approval: ApprovalRequest }
+  | {
+      type: 'node-evolution';
+      nodeId: string;
+      nodeName: string;
+      mode: EvolutionMode;
+      evolution: WorkflowEvolution;
+      applied: boolean;
+      validationErrors: string[];
+      beforeSnapshot?: WorkflowSnapshot;
+      afterSnapshot?: WorkflowSnapshot;
+      approvalRequested?: boolean;
+      approvalResponse?: ApprovalResponse;
+    }
   | { type: 'execution-complete'; result: unknown }
   | { type: 'execution-error'; error: string }
   | { type: 'validation-error'; errors: WorkflowValidationError[] };
@@ -170,7 +185,13 @@ export type ControlEvent =
       sourceExecutionId: string;
       fromNodeId: string;
     }
-  | { type: 'submit-approval'; executionId: string; nodeId: string; response: ApprovalResponse };
+  | { type: 'submit-approval'; executionId: string; nodeId: string; response: ApprovalResponse }
+  | {
+      type: 'submit-evolution-approval';
+      executionId: string;
+      nodeId: string;
+      response: ApprovalResponse;
+    };
 
 // =============================================================================
 // Agent Session Types

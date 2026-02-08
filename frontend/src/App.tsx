@@ -10,6 +10,7 @@ import { MCPServersPage } from './pages/MCPServersPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { ApprovalModal } from './components/Execution/ApprovalModal';
 import { ValidationErrorModal } from './components/Execution/ValidationErrorModal';
+import { EvolutionApprovalPanel } from './components/Sidebar/EvolutionApprovalPanel';
 import { NavigationContext, useNavigationValue } from './contexts/NavigationContext';
 import { Save, Wifi, WifiOff, PanelLeftClose, PanelRightClose, Check, Loader2, AlertCircle, Pencil, Play, FolderOpen, X, Server } from 'lucide-react';
 
@@ -241,6 +242,7 @@ export default function App() {
     interruptExecution,
     resetExecution,
     submitApproval,
+    submitEvolution,
     clearValidationErrors,
     fetchExecutionHistory,
     loadExecutionHistory,
@@ -476,6 +478,14 @@ export default function App() {
           <ApprovalModal
             approval={execution.pendingApproval}
             onSubmit={submitApproval}
+          />
+        )}
+
+        {/* Evolution Approval Panel - shown when self-reflect node proposes workflow evolution */}
+        {execution.pendingEvolution && (
+          <EvolutionApprovalPanel
+            evolution={execution.pendingEvolution}
+            onSubmit={submitEvolution}
           />
         )}
 

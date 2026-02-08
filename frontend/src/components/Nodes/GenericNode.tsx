@@ -251,6 +251,32 @@ function NodePreview({ schema, config }: { schema: NodeSchemaDefinition; config:
     );
   }
 
+  // Custom preview for self-reflect nodes
+  if (nodeType === 'self-reflect') {
+    const evolutionMode = config.evolutionMode as string | undefined;
+    const agentProvider = config.agentProvider as string | undefined;
+    const scopes = config.evolutionScopes as string[] | undefined;
+
+    return (
+      <div className="text-xs text-gray-600 dark:text-gray-300 space-y-1">
+        <div className="flex justify-between">
+          <span>Mode:</span>
+          <span className="font-medium">{evolutionMode || 'suggest'}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Agent:</span>
+          <span className="font-medium">{agentProvider || 'claude'}</span>
+        </div>
+        {scopes && scopes.length > 0 && (
+          <div className="flex justify-between">
+            <span>Scopes:</span>
+            <span className="font-medium">{scopes.length}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // Default: show first few properties with values
   return (
     <div className="text-xs text-gray-500 dark:text-gray-400">

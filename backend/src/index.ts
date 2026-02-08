@@ -36,7 +36,13 @@ import {
 import { validateWorkflow } from './orchestrator/validation.js';
 import { ExecutionEvent, ControlEvent, Workflow, ApprovalResponse } from './workflows/types.js';
 import { loadAllSchemas, getSchema, getDefaultConfig } from './schemas/index.js';
-import { submitApproval, cancelAllApprovals } from './orchestrator/executors/index.js';
+import {
+  submitApproval,
+  cancelAllApprovals,
+  submitEvolutionApproval,
+  cancelAllEvolutionApprovals,
+} from './orchestrator/executors/index.js';
+import { readEvolutionHistory } from './orchestrator/evolution-applier.js';
 import { initializeMCPServerManager } from './mcp/server-manager.js';
 import mcpRoutes from './mcp/routes.js';
 
@@ -224,6 +230,17 @@ app.get('/api/workflows/:id/executions/:executionId/events', async (req, res) =>
   res.json(events);
 });
 
+// Evolution history API
+app.get('/api/workflows/:id/evolution-history', async (req, res) => {
+  const workflow = getWorkflow(req.params.id);
+  if (!workflow) {
+    res.status(404).json({ error: 'Workflow not found' });
+    return;
+  }
+  const history = await readEvolutionHistory(req.params.id);
+  res.json(history);
+});
+
 app.get('/api/workflows/:id/executions/:executionId/replay-info', async (req, res) => {
   const workflow = getWorkflow(req.params.id);
   if (!workflow) {
@@ -356,6 +373,10 @@ io.on('connection', async (socket: Socket) => {
       case 'submit-approval':
         handleSubmitApproval(socket, event.executionId, event.nodeId, event.response);
         break;
+
+      case 'submit-evolution-approval':
+        handleSubmitEvolutionApproval(socket, event.executionId, event.nodeId, event.response);
+        break;
     }
   });
 
@@ -392,6 +413,13 @@ function attachExecutionEventHandlers(
     if (execution) {
       for (const socketId of execution.subscribedSockets) {
         io.to(socketId).emit('event', event);
+      }
+    }
+
+    if (event.type === 'node-evolution' && event.applied) {
+      const updatedWorkflow = getWorkflow(workflow.id);
+      if (updatedWorkflow) {
+        io.emit('workflow-updated', updatedWorkflow);
       }
     }
 
@@ -686,6 +714,7 @@ async function handleInterrupt(socket: Socket, executionId: string): Promise<voi
 
   // Cancel any pending approvals for this execution
   cancelAllApprovals(executionId);
+  cancelAllEvolutionApprovals(executionId);
 
   await execution.engine.interrupt();
 }
@@ -720,6 +749,40 @@ function handleSubmitApproval(
     socket.emit('event', {
       type: 'execution-error',
       error: 'No pending approval found for this node',
+    } as ExecutionEvent);
+  }
+}
+
+function handleSubmitEvolutionApproval(
+  socket: Socket,
+  executionId: string,
+  nodeId: string,
+  response: ApprovalResponse
+): void {
+  const execution = activeExecutions.get(executionId);
+
+  if (!execution) {
+    socket.emit('event', {
+      type: 'execution-error',
+      error: 'No active execution found',
+    } as ExecutionEvent);
+    return;
+  }
+
+  if (!execution.subscribedSockets.has(socket.id)) {
+    socket.emit('event', {
+      type: 'execution-error',
+      error: 'Not authorized for this execution',
+    } as ExecutionEvent);
+    return;
+  }
+
+  const success = submitEvolutionApproval(executionId, nodeId, response);
+
+  if (!success) {
+    socket.emit('event', {
+      type: 'execution-error',
+      error: 'No pending evolution approval found for this node',
     } as ExecutionEvent);
   }
 }

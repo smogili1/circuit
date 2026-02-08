@@ -30,6 +30,7 @@ export { mergeSchema, type MergeNodeConfig } from './merge';
 export { javascriptSchema, type JavaScriptNodeConfig } from './javascript';
 export { approvalSchema, type ApprovalNodeConfig, type ApprovalInputSelection } from './approval';
 export { bashSchema, type BashNodeConfig } from './bash';
+export { selfReflectSchema, type SelfReflectNodeConfig } from './self-reflect';
 
 // Import for registry
 import { claudeAgentSchema } from './claude-agent';
@@ -41,6 +42,7 @@ import { mergeSchema } from './merge';
 import { javascriptSchema } from './javascript';
 import { approvalSchema } from './approval';
 import { bashSchema } from './bash';
+import { selfReflectSchema } from './self-reflect';
 
 import type { ClaudeNodeConfig } from './claude-agent';
 import type { CodexNodeConfig } from './codex-agent';
@@ -51,6 +53,7 @@ import type { MergeNodeConfig } from './merge';
 import type { JavaScriptNodeConfig } from './javascript';
 import type { ApprovalNodeConfig } from './approval';
 import type { BashNodeConfig } from './bash';
+import type { SelfReflectNodeConfig } from './self-reflect';
 
 // Schema registry - maps node type to schema definition
 export const schemas = {
@@ -63,6 +66,7 @@ export const schemas = {
   'javascript': javascriptSchema,
   'approval': approvalSchema,
   'bash': bashSchema,
+  'self-reflect': selfReflectSchema,
 } as const;
 
 // Union type of all node configurations
@@ -75,7 +79,8 @@ export type NodeConfig =
   | MergeNodeConfig
   | JavaScriptNodeConfig
   | ApprovalNodeConfig
-  | BashNodeConfig;
+  | BashNodeConfig
+  | SelfReflectNodeConfig;
 
 // Node type string literal union
 export type NodeType = NodeConfig['type'];
