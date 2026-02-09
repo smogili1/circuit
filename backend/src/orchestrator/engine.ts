@@ -550,11 +550,20 @@ export class DAGExecutionEngine extends EventEmitter {
       }
 
       // Handle branching (condition nodes)
+      let handledBranching = false;
       if (executor.getOutputHandle) {
         const activeHandle = executor.getOutputHandle(result, node);
         if (activeHandle !== null) {
           this.markInactiveBranches(node.id, activeHandle);
+          handledBranching = true;
         }
+      }
+
+      // Handle back-edges for non-condition nodes (loops where the back-edge
+      // comes from a regular node like javascript, claude-agent, etc.)
+      // Condition nodes already handle back-edges via markInactiveBranches.
+      if (!handledBranching) {
+        this.handleBackEdges(node.id);
       }
 
       this.emit('event', {
@@ -691,6 +700,26 @@ export class DAGExecutionEngine extends EventEmitter {
         if (successorState?.status === 'complete' || successorState?.status === 'skipped') {
           this.resetNodeForReExecution(successorId, loopTargetId, backEdgeNodes);
         }
+      }
+    }
+  }
+
+  /**
+   * Handle back-edges after a node completes.
+   * If any successor is already 'complete', it's a loop back-edge — reset that
+   * successor and its downstream nodes for re-execution.
+   * This covers loops where the back-edge originates from a non-condition node
+   * (e.g., test-fixer → run-backend-tests, update-debate → claude-planner).
+   */
+  private handleBackEdges(nodeId: string): void {
+    const successorIds = this.getSuccessorIds(nodeId);
+    for (const successorId of successorIds) {
+      const state = this.nodeStates.get(successorId);
+      if (state?.status === 'complete') {
+        console.log(
+          `[Engine] Back-edge detected: ${nodeId} → ${successorId} (already complete), resetting for re-execution`
+        );
+        this.resetNodeForReExecution(successorId, successorId);
       }
     }
   }
