@@ -26,9 +26,13 @@ import {
   saveExecutionCheckpoint,
   updateExecutionSummary,
 } from './executions/storage.js';
-import type { ExecutionSummary } from './executions/storage.js';
 import { DAGExecutionEngine } from './orchestrator/engine.js';
-import { buildCheckpointState, buildReplayInfo, buildReplayPlan } from './orchestrator/replay.js';
+import {
+  buildCheckpointState,
+  buildReplayInfo,
+  buildReplayPlan,
+  validateReplayEligibility,
+} from './orchestrator/replay.js';
 import { validateWorkflow } from './orchestrator/validation.js';
 import { ExecutionEvent, ControlEvent, Workflow, ApprovalResponse } from './workflows/types.js';
 import { loadAllSchemas, getSchema, getDefaultConfig } from './schemas/index.js';
@@ -243,6 +247,36 @@ app.get('/api/workflows/:id/executions/:executionId/replay-info', async (req, re
   res.json(replayInfo);
 });
 
+app.post('/api/workflows/:id/executions/:executionId/validate-replay', async (req, res) => {
+  const { fromNodeId } = req.body ?? {};
+  if (!fromNodeId) {
+    res.status(400).json({ error: 'fromNodeId is required' });
+    return;
+  }
+
+  const workflow = getWorkflow(req.params.id);
+  if (!workflow) {
+    res.status(404).json({ error: 'Workflow not found' });
+    return;
+  }
+
+  const summary = await readExecutionSummary(req.params.id, req.params.executionId);
+  if (!summary) {
+    res.status(404).json({ error: 'Execution not found' });
+    return;
+  }
+
+  const checkpoint = await readExecutionCheckpoint(req.params.id, req.params.executionId);
+  const validation = validateReplayEligibility(
+    workflow,
+    req.params.executionId,
+    checkpoint,
+    summary.workflowSnapshot,
+    fromNodeId
+  );
+  res.json(validation);
+});
+
 app.get('/api/executions/running', (_req, res) => {
   const running = Array.from(activeExecutions.entries()).map(([executionId, exec]) => ({
     executionId,
@@ -311,8 +345,12 @@ io.on('connection', async (socket: Socket) => {
         break;
 
       case 'replay-execution':
-        //TODO: Implement replay functionality
-        console.log('Replay not yet implemented');
+        await handleReplayExecution(
+          socket,
+          event.workflowId,
+          event.sourceExecutionId,
+          event.fromNodeId
+        );
         break;
 
       case 'submit-approval':
@@ -341,6 +379,62 @@ io.on('connection', async (socket: Socket) => {
     socketSubscriptions.delete(socket.id);
   });
 });
+
+function attachExecutionEventHandlers(
+  engine: DAGExecutionEngine,
+  workflow: Workflow,
+  executionId: string
+): () => Promise<void> {
+  let eventWriteChain = Promise.resolve();
+
+  engine.on('event', (event: ExecutionEvent) => {
+    const execution = activeExecutions.get(executionId);
+    if (execution) {
+      for (const socketId of execution.subscribedSockets) {
+        io.to(socketId).emit('event', event);
+      }
+    }
+
+    const record = { timestamp: new Date().toISOString(), event };
+    eventWriteChain = eventWriteChain
+      .then(async () => {
+        await appendExecutionEvent(workflow.id, executionId, record);
+
+        if (
+          event.type === 'execution-start' ||
+          event.type === 'node-start' ||
+          event.type === 'node-complete' ||
+          event.type === 'node-error' ||
+          event.type === 'execution-complete' ||
+          event.type === 'execution-error'
+        ) {
+          const summary = await readExecutionSummary(workflow.id, executionId);
+          if (summary) {
+            const updated = applyExecutionEventToSummary(summary, record);
+            await saveExecutionSummary(workflow.id, executionId, updated);
+          }
+        }
+
+        // Save checkpoint on node completion (not just execution completion)
+        // This enables replay from interrupted executions
+        if (event.type === 'node-complete' || event.type === 'execution-complete') {
+          const checkpoint = buildCheckpointState(
+            engine.getNodeStates(),
+            engine.getContext().nodeOutputs,
+            engine.getContext().variables
+          );
+          await saveExecutionCheckpoint(workflow.id, executionId, checkpoint);
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to record execution event:', error);
+      });
+  });
+
+  return async () => {
+    await eventWriteChain;
+  };
+}
 
 async function handleStartExecution(
   socket: Socket,
@@ -390,46 +484,142 @@ async function handleStartExecution(
     socketSubscriptions.set(socket.id, new Set());
   }
   socketSubscriptions.get(socket.id)!.add(executionId);
-
-  let eventWriteChain = Promise.resolve();
-
-  // Forward all events to subscribed clients
-  engine.on('event', (event: ExecutionEvent) => {
-    const execution = activeExecutions.get(executionId);
-    if (execution) {
-      for (const socketId of execution.subscribedSockets) {
-        io.to(socketId).emit('event', event);
-      }
-    }
-    const record = { timestamp: new Date().toISOString(), event };
-    eventWriteChain = eventWriteChain
-      .then(async () => {
-        await appendExecutionEvent(workflow.id, executionId, record);
-
-        if (
-          event.type === 'execution-start' ||
-          event.type === 'node-start' ||
-          event.type === 'node-complete' ||
-          event.type === 'node-error' ||
-          event.type === 'execution-complete' ||
-          event.type === 'execution-error'
-        ) {
-          const summary = await readExecutionSummary(workflow.id, executionId);
-          if (summary) {
-            const updated = applyExecutionEventToSummary(summary, record);
-            await saveExecutionSummary(workflow.id, executionId, updated);
-          }
-        }
-      })
-      .catch((error) => {
-        console.error('Failed to record execution event:', error);
-      });
-  });
+  const waitForEvents = attachExecutionEventHandlers(engine, workflow, executionId);
 
   try {
     await engine.execute(input);
   } finally {
-    await eventWriteChain;
+    await waitForEvents();
+    activeExecutions.delete(executionId);
+    for (const [socketId, socketExecutionIds] of socketSubscriptions.entries()) {
+      socketExecutionIds.delete(executionId);
+      if (socketExecutionIds.size === 0) {
+        socketSubscriptions.delete(socketId);
+      }
+    }
+  }
+}
+
+async function handleReplayExecution(
+  socket: Socket,
+  workflowId: string,
+  sourceExecutionId: string,
+  fromNodeId: string
+): Promise<void> {
+  if (!fromNodeId) {
+    socket.emit('event', {
+      type: 'execution-error',
+      error: 'Replay requires a starting node',
+    } as ExecutionEvent);
+    return;
+  }
+
+  const workflow = getWorkflow(workflowId);
+  if (!workflow) {
+    socket.emit('event', {
+      type: 'execution-error',
+      error: 'Workflow not found',
+    } as ExecutionEvent);
+    return;
+  }
+
+  const validation = validateWorkflow(workflow);
+  if (!validation.valid) {
+    socket.emit('event', {
+      type: 'validation-error',
+      errors: validation.errors,
+    } as ExecutionEvent);
+    return;
+  }
+
+  const summary = await readExecutionSummary(workflowId, sourceExecutionId);
+  if (!summary) {
+    socket.emit('event', {
+      type: 'execution-error',
+      error: 'Source execution not found',
+    } as ExecutionEvent);
+    return;
+  }
+
+  const checkpoint = await readExecutionCheckpoint(workflowId, sourceExecutionId);
+  const replayValidation = validateReplayEligibility(
+    workflow,
+    sourceExecutionId,
+    checkpoint,
+    summary.workflowSnapshot,
+    fromNodeId
+  );
+
+  if (replayValidation.isBlocked) {
+    const reason = replayValidation.blockingReasons.join('; ');
+    socket.emit('event', {
+      type: 'execution-error',
+      error: reason ? `Replay blocked: ${reason}` : 'Replay blocked',
+    } as ExecutionEvent);
+    return;
+  }
+
+  if (!checkpoint) {
+    socket.emit('event', {
+      type: 'execution-error',
+      error: 'Checkpoint data is not available for this execution',
+    } as ExecutionEvent);
+    return;
+  }
+
+  const replayPlan = buildReplayPlan(workflow, checkpoint, fromNodeId);
+  if (replayPlan.errors.length > 0) {
+    const reason = replayPlan.errors.map((error) => error.message).join('; ');
+    socket.emit('event', {
+      type: 'execution-error',
+      error: reason || 'Replay validation failed',
+    } as ExecutionEvent);
+    return;
+  }
+
+  // Always use original input - node configuration changes are still applied
+  const replayInput = summary.input;
+
+  const engine = new DAGExecutionEngine(workflow, workflow.workingDirectory);
+  const executionId = engine.getContext().executionId;
+
+  try {
+    await createExecutionSummary(workflow, executionId, replayInput);
+    await updateExecutionSummary(workflow.id, executionId, {
+      sourceExecutionId,
+      replayFromNodeId: fromNodeId,
+    });
+  } catch (error) {
+    socket.emit('event', {
+      type: 'execution-error',
+      error: error instanceof Error ? error.message : 'Failed to persist execution',
+    } as ExecutionEvent);
+    return;
+  }
+
+  activeExecutions.set(executionId, {
+    engine,
+    workflowId: workflow.id,
+    subscribedSockets: new Set([socket.id]),
+    startedAt: new Date(),
+  });
+
+  if (!socketSubscriptions.has(socket.id)) {
+    socketSubscriptions.set(socket.id, new Set());
+  }
+  socketSubscriptions.get(socket.id)!.add(executionId);
+
+  const waitForEvents = attachExecutionEventHandlers(engine, workflow, executionId);
+
+  try {
+    await engine.executeFromCheckpoint(
+      replayInput,
+      checkpoint,
+      replayPlan.replayNodeIds,
+      replayPlan.inactiveNodeIds
+    );
+  } finally {
+    await waitForEvents();
     activeExecutions.delete(executionId);
     for (const [socketId, socketExecutionIds] of socketSubscriptions.entries()) {
       socketExecutionIds.delete(executionId);

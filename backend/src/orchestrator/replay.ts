@@ -5,6 +5,7 @@ import {
   ReplayCheckpoint,
   ReplayError,
   ReplayInfo,
+  ReplayValidationResult,
   ReplayWarning,
   Workflow,
   WorkflowEdge,
@@ -168,6 +169,35 @@ function compareWorkflowSnapshot(
   return warnings;
 }
 
+function isBlockingWorkflowChange(warning: ReplayWarning): boolean {
+  return warning.type === 'node-added' || warning.type === 'node-removed';
+}
+
+function addUniqueReason(reasons: string[], reason: string): void {
+  if (!reasons.includes(reason)) {
+    reasons.push(reason);
+  }
+}
+
+function buildReplayBlockingReasons(
+  warnings: ReplayWarning[],
+  errors: ReplayError[]
+): string[] {
+  const reasons: string[] = [];
+
+  for (const warning of warnings) {
+    if (isBlockingWorkflowChange(warning)) {
+      addUniqueReason(reasons, warning.message);
+    }
+  }
+
+  for (const error of errors) {
+    addUniqueReason(reasons, error.message);
+  }
+
+  return reasons;
+}
+
 export function buildCheckpointState(
   nodeStates: Map<string, NodeState>,
   nodeOutputs: Map<string, unknown>,
@@ -207,7 +237,7 @@ export function computeInactiveBranchNodes(
   checkpoint: CheckpointState,
   replayNodeIds: Set<string>
 ): Set<string> {
-  const inactiveNodes = new Set<string>();
+  const potentiallyInactiveNodes = new Set<string>();
 
   for (const node of workflow.nodes) {
     if (replayNodeIds.has(node.id)) continue;
@@ -229,8 +259,21 @@ export function computeInactiveBranchNodes(
       if (!edge.sourceHandle) continue;
       if (edge.sourceHandle === activeHandle) continue;
       for (const targetId of getReachableFrom(edge.target, workflow.edges)) {
-        inactiveNodes.add(targetId);
+        potentiallyInactiveNodes.add(targetId);
       }
+    }
+  }
+
+  // Filter out nodes that actually executed - they're not truly inactive
+  // A node that completed or errored was on an active path (even if it's also reachable from inactive branches)
+  // Nodes that were 'skipped' or 'pending' ARE on inactive branches
+  const inactiveNodes = new Set<string>();
+  for (const nodeId of potentiallyInactiveNodes) {
+    const state = checkpoint.nodeStates[nodeId];
+    // Mark as inactive if the node was skipped, pending, or doesn't exist in checkpoint
+    // Don't mark as inactive if it completed or errored (those actually executed)
+    if (!state || state.status === 'pending' || state.status === 'skipped') {
+      inactiveNodes.add(nodeId);
     }
   }
 
@@ -304,12 +347,14 @@ export function buildReplayInfo(
       type: 'missing-checkpoint',
       message: 'Checkpoint data is not available for this execution.',
     });
+    const blockingReasons = buildReplayBlockingReasons(warnings, errors);
     return {
       sourceExecutionId,
       workflowId: workflow.id,
       checkpoints: [],
       warnings,
       errors,
+      isReplayBlocked: blockingReasons.length > 0,
     };
   }
 
@@ -321,6 +366,7 @@ export function buildReplayInfo(
     let replayable = true;
     let reason: string | undefined;
 
+    // Check if any ancestor is not in a reusable state
     for (const ancestorId of ancestors) {
       const ancestorState = checkpoint.nodeStates[ancestorId];
       if (!ancestorState || !isReusableStatus(ancestorState.status)) {
@@ -328,6 +374,13 @@ export function buildReplayInfo(
         reason = 'Missing completed upstream dependency';
         break;
       }
+    }
+
+    // Nodes with error status ARE replayable - that's the point of retry
+    // Only running nodes cannot be replayed (execution in progress)
+    if (replayable && state && state.status === 'running') {
+      replayable = false;
+      reason = 'Node execution is in progress';
     }
 
     if (replayable && inactiveNodeIds.has(node.id)) {
@@ -343,6 +396,7 @@ export function buildReplayInfo(
       reason,
     };
   });
+  const blockingReasons = buildReplayBlockingReasons(warnings, errors);
 
   return {
     sourceExecutionId,
@@ -350,5 +404,54 @@ export function buildReplayInfo(
     checkpoints,
     warnings,
     errors,
+    isReplayBlocked: blockingReasons.length > 0,
+  };
+}
+
+export function validateReplayEligibility(
+  workflow: Workflow,
+  sourceExecutionId: string,
+  checkpoint: CheckpointState | null,
+  workflowSnapshot: WorkflowSnapshot | undefined,
+  fromNodeId?: string
+): ReplayValidationResult {
+  const replayInfo = buildReplayInfo(
+    workflow,
+    sourceExecutionId,
+    checkpoint,
+    workflowSnapshot
+  );
+
+  const blockingReasons: string[] = [];
+  const warnings: string[] = [];
+
+  for (const warning of replayInfo.warnings) {
+    if (isBlockingWorkflowChange(warning)) {
+      addUniqueReason(blockingReasons, warning.message);
+    } else {
+      warnings.push(warning.message);
+    }
+  }
+
+  for (const error of replayInfo.errors) {
+    addUniqueReason(blockingReasons, error.message);
+  }
+
+  if (checkpoint && fromNodeId) {
+    const plan = buildReplayPlan(workflow, checkpoint, fromNodeId);
+    for (const error of plan.errors) {
+      addUniqueReason(blockingReasons, error.message);
+    }
+  }
+
+  const replayableNodeIds = replayInfo.checkpoints
+    .filter((entry) => entry.replayable)
+    .map((entry) => entry.nodeId);
+
+  return {
+    isBlocked: blockingReasons.length > 0,
+    blockingReasons,
+    warnings,
+    replayableNodeIds,
   };
 }

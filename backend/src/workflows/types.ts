@@ -169,8 +169,6 @@ export type ControlEvent =
       workflowId: string;
       sourceExecutionId: string;
       fromNodeId: string;
-      useOriginalInput?: boolean;
-      input?: string;
     }
   | { type: 'submit-approval'; executionId: string; nodeId: string; response: ApprovalResponse };
 
@@ -235,8 +233,6 @@ export interface CheckpointState {
 export interface ReplayConfig {
   sourceExecutionId: string;
   fromNodeId: string;
-  useOriginalInput?: boolean;
-  input?: string;
 }
 
 export type ReplayWarningType =
@@ -281,6 +277,14 @@ export interface ReplayInfo {
   checkpoints: ReplayCheckpoint[];
   warnings: ReplayWarning[];
   errors: ReplayError[];
+  isReplayBlocked: boolean;
+}
+
+export interface ReplayValidationResult {
+  isBlocked: boolean;
+  blockingReasons: string[];
+  warnings: string[];
+  replayableNodeIds: string[];
 }
 
 // =============================================================================

@@ -293,7 +293,64 @@ export type ControlEvent =
   | { type: 'interrupt'; executionId: string }
   | { type: 'resume'; executionId: string }
   | { type: 'subscribe-execution'; executionId: string; afterTimestamp?: string }
+  | {
+      type: 'replay-execution';
+      workflowId: string;
+      sourceExecutionId: string;
+      fromNodeId: string;
+    }
   | { type: 'submit-approval'; executionId: string; nodeId: string; response: ApprovalResponse };
+
+// =============================================================================
+// Replay Types
+// =============================================================================
+
+export type ReplayWarningType =
+  | 'node-config-changed'
+  | 'workflow-structure-modified'
+  | 'missing-dependencies';
+
+export type ReplayErrorType =
+  | 'node-added'
+  | 'node-removed'
+  | 'workflow-snapshot-missing'
+  | 'checkpoint-missing';
+
+export interface ReplayWarning {
+  type: ReplayWarningType;
+  message: string;
+  nodeId?: string;
+}
+
+export interface ReplayError {
+  type: ReplayErrorType;
+  message: string;
+  nodeId?: string;
+}
+
+export interface ReplayCheckpoint {
+  nodeId: string;
+  nodeName: string;
+  status: NodeStatus;
+  replayable: boolean;
+  reason?: string;
+}
+
+export interface ReplayInfo {
+  sourceExecutionId: string;
+  workflowId: string;
+  checkpoints: ReplayCheckpoint[];
+  warnings: ReplayWarning[];
+  errors: ReplayError[];
+  isReplayBlocked: boolean;
+}
+
+export interface ReplayValidationResult {
+  isBlocked: boolean;
+  blockingReasons: string[];
+  warnings: string[];
+  replayableNodeIds: string[];
+}
 
 // =============================================================================
 // Constants

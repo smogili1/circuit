@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { ExecutionSummary } from '../../types/workflow';
-import { RefreshCw, History } from 'lucide-react';
+import { RefreshCw, History, RotateCcw } from 'lucide-react';
 
 interface ExecutionHistoryProps {
   workflowId: string | null;
@@ -9,6 +9,7 @@ interface ExecutionHistoryProps {
   isRunning: boolean;
   onRefresh: (workflowId: string) => void;
   onLoad: (workflowId: string, executionId: string) => void;
+  onRetry?: (workflowId: string, executionId: string, input: string) => void;
 }
 
 function formatTimestamp(value?: string): string {
@@ -48,6 +49,7 @@ export function ExecutionHistory({
   isRunning: _isRunning,
   onRefresh,
   onLoad,
+  onRetry,
 }: ExecutionHistoryProps) {
   const navigate = useNavigate();
 
@@ -87,44 +89,67 @@ export function ExecutionHistory({
             // Allow clicking to view any execution, even while another is running
             const isClickable = !!workflowId;
 
+            const canRetry = onRetry && (execution.status === 'complete' || execution.status === 'error' || execution.status === 'interrupted');
+
             return (
-              <button
+              <div
                 key={execution.executionId}
-                onClick={() => {
-                  if (workflowId) {
-                    navigate(`/workflows/${workflowId}/executions/${execution.executionId}`);
-                    onLoad(workflowId, execution.executionId);
-                  }
-                }}
-                disabled={!isClickable}
-                className={`w-full text-left rounded-md border px-3 py-2 text-xs transition-colors ${
+                className={`rounded-md border px-3 py-2 text-xs transition-colors ${
                   isActive
                     ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20'
                     : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900'
-                } ${isClickable ? 'cursor-pointer hover:border-blue-300 hover:bg-gray-50 dark:hover:bg-gray-800' : 'cursor-default opacity-70'}`}
+                }`}
               >
-                <div className="flex items-center justify-between">
-                  <div className="font-medium text-gray-800 dark:text-gray-100">
-                    {formatTimestamp(execution.startedAt)}
+                <button
+                  onClick={() => {
+                    if (workflowId) {
+                      navigate(`/workflows/${workflowId}/executions/${execution.executionId}`);
+                      onLoad(workflowId, execution.executionId);
+                    }
+                  }}
+                  disabled={!isClickable}
+                  className={`w-full text-left ${isClickable ? 'cursor-pointer' : 'cursor-default opacity-70'}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="font-medium text-gray-800 dark:text-gray-100">
+                      {formatTimestamp(execution.startedAt)}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded ${statusClass}`}>
+                        {execution.status}
+                      </span>
+                      {canRetry && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (workflowId) {
+                              onRetry(workflowId, execution.executionId, execution.input);
+                            }
+                          }}
+                          title="Retry from step"
+                          className="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400
+                            hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
+                        >
+                          <RotateCcw size={14} />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <span className={`px-2 py-0.5 rounded ${statusClass}`}>
-                    {execution.status}
-                  </span>
-                </div>
-                <div className="mt-1 text-gray-600 dark:text-gray-400">
-                  Duration: {formatDuration(execution.startedAt, execution.completedAt)}
-                </div>
-                {execution.input && (
-                  <div className="mt-1 text-gray-500 dark:text-gray-400">
-                    {truncate(execution.input, 120)}
+                  <div className="mt-1 text-gray-600 dark:text-gray-400">
+                    Duration: {formatDuration(execution.startedAt, execution.completedAt)}
                   </div>
-                )}
-                {execution.error && (
-                  <div className="mt-1 text-red-600 dark:text-red-400">
-                    {execution.error}
-                  </div>
-                )}
-              </button>
+                  {execution.input && (
+                    <div className="mt-1 text-gray-500 dark:text-gray-400">
+                      {truncate(execution.input, 120)}
+                    </div>
+                  )}
+                  {execution.error && (
+                    <div className="mt-1 text-red-600 dark:text-red-400">
+                      {execution.error}
+                    </div>
+                  )}
+                </button>
+              </div>
             );
           })}
         </div>
