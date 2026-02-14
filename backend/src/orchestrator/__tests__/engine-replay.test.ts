@@ -115,8 +115,14 @@ function createConditionalWorkflow(): Workflow {
         data: {
           type: 'condition',
           name: 'Condition',
-          rules: [{ field: 'value', operator: 'equals', value: 'true', joiner: 'and' }],
-          inputSelection: { nodeId: 'input-1', nodeName: 'Input' },
+          conditions: [
+            {
+              inputReference: '{{Input.prompt}}',
+              operator: 'equals',
+              compareValue: 'true',
+              joiner: 'and',
+            },
+          ],
         } as any,
       },
       {
@@ -357,8 +363,8 @@ describe('Engine executeFromCheckpoint', () => {
 
     await engine.executeFromCheckpoint(newInput, checkpoint, new Set(['Agent', 'Output']), new Set());
 
-    // Input node should have new input
-    expect(engine.getNodeOutput('Input')).toBe(newInput);
+    // Input node should keep checkpoint output when not replayed.
+    expect(engine.getNodeOutput('Input')).toBe('old input');
     expect(engine.getNodeState('Input')?.status).toBe('complete');
   });
 });
@@ -470,8 +476,8 @@ describe('Edge cases', () => {
 
     await engine.executeFromCheckpoint('new input', checkpoint, new Set(['A', 'B']), new Set());
 
-    // Input should be set with new input
-    expect(engine.getNodeOutput('Input')).toBe('new input');
+    // Input should keep checkpoint output because it is not replayed.
+    expect(engine.getNodeOutput('Input')).toBe('old');
 
     // A should execute with new input
     const aStarts = events.filter((e) => e.type === 'node-start' && (e as any).nodeId === 'A');
@@ -526,7 +532,7 @@ describe('Edge cases', () => {
     // Should not throw
     await expect(
       engine.executeFromCheckpoint('test', checkpoint, new Set(['B']), new Set())
-    ).resolves.toBeDefined();
+    ).resolves.toBeUndefined();
   });
 
   it('checkpoint missing required node data', async () => {
@@ -544,7 +550,7 @@ describe('Edge cases', () => {
     // Should handle gracefully
     await expect(
       engine.executeFromCheckpoint('test', checkpoint, new Set(['C']), new Set())
-    ).resolves.toBeDefined();
+    ).resolves.toBeUndefined();
 
     // B should get executed or have default status
     const bState = engine.getNodeState('B');

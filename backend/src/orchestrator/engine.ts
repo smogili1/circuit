@@ -130,11 +130,7 @@ export class DAGExecutionEngine extends EventEmitter {
     }
 
     for (const node of this.workflow.nodes) {
-      if (node.type === 'input') {
-        setNodeOutput(this.context, node.id, input);
-        this.updateNodeState(node.id, 'complete', input);
-        continue;
-      }
+      const checkpointState = checkpoint.nodeStates[node.id];
 
       if (replayNodeIds.has(node.id)) {
         this.nodeStates.set(node.id, { status: 'pending' });
@@ -142,16 +138,27 @@ export class DAGExecutionEngine extends EventEmitter {
         continue;
       }
 
-      const checkpointState = checkpoint.nodeStates[node.id];
-      if (checkpointState?.status === 'complete') {
-        const output = this.context.nodeOutputs.get(node.id);
-        this.updateNodeState(node.id, 'complete', output);
-        continue;
-      }
-
       if (checkpointState?.status === 'skipped' || inactiveNodeIds.has(node.id)) {
         this.updateNodeState(node.id, 'skipped');
         this.context.nodeOutputs.delete(node.id);
+        continue;
+      }
+
+      if (node.type === 'input') {
+        // Preserve checkpoint input output for non-replay nodes to keep replay deterministic.
+        if (checkpointState?.status === 'complete' && this.context.nodeOutputs.has(node.id)) {
+          const output = this.context.nodeOutputs.get(node.id);
+          this.updateNodeState(node.id, 'complete', output);
+        } else {
+          setNodeOutput(this.context, node.id, input);
+          this.updateNodeState(node.id, 'complete', input);
+        }
+        continue;
+      }
+
+      if (checkpointState?.status === 'complete') {
+        const output = this.context.nodeOutputs.get(node.id);
+        this.updateNodeState(node.id, 'complete', output);
         continue;
       }
 
@@ -166,7 +173,7 @@ export class DAGExecutionEngine extends EventEmitter {
     } as ExecutionEvent);
 
     for (const node of this.workflow.nodes) {
-      if (node.type === 'input' || replayNodeIds.has(node.id)) continue;
+      if (replayNodeIds.has(node.id)) continue;
       const state = this.nodeStates.get(node.id);
       if (state?.status === 'complete' || state?.status === 'skipped') {
         this.emit('event', {

@@ -81,8 +81,14 @@ function createConditionalWorkflow(): Workflow {
         data: {
           type: 'condition',
           name: 'Condition',
-          rules: [{ field: 'value', operator: 'equals', value: 'true', joiner: 'and' }],
-          inputSelection: { nodeId: 'input-1', nodeName: 'Input' },
+          conditions: [
+            {
+              inputReference: '{{Input.prompt}}',
+              operator: 'equals',
+              compareValue: 'true',
+              joiner: 'and',
+            },
+          ],
         } as any,
       },
       {
@@ -235,7 +241,7 @@ describe('Complete Replay Flow', () => {
     const events1: ExecutionEvent[] = [];
     engine1.on('event', (event) => events1.push(event));
 
-    const input = JSON.stringify({ value: 'true' });
+    const input = 'true';
     await engine1.execute(input);
 
     // Verify original execution
@@ -344,7 +350,7 @@ describe('Complete Replay Flow', () => {
     const engine2 = new DAGExecutionEngine(modifiedWorkflow);
     await expect(
       engine2.executeFromCheckpoint('test', checkpoint, replayPlan.replayNodeIds, replayPlan.inactiveNodeIds)
-    ).resolves.toBeDefined();
+    ).resolves.toBeUndefined();
   });
 
   it('blocks replay when structural changes detected', async () => {
@@ -566,6 +572,6 @@ describe('Edge Cases', () => {
     // Should not throw
     await expect(
       engine.executeFromCheckpoint('test', checkpoint, replayPlan.replayNodeIds, replayPlan.inactiveNodeIds)
-    ).resolves.toBeDefined();
+    ).resolves.toBeUndefined();
   });
 });
