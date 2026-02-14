@@ -55,7 +55,7 @@ nodes:
       model: haiku
       systemPrompt: "You have perfect memory. When asked to remember something, acknowledge it. When asked to recall, provide the exact value."
       tools: []
-      maxTurns: 1
+      maxTurns: 8
       conversationMode: persist
       outputConfig:
         format: json

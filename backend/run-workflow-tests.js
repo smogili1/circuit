@@ -4,7 +4,8 @@
  * Executes test workflows and validates results
  */
 
-const { io } = require('socket.io-client');
+import { promises as fs } from 'node:fs';
+import { io } from 'socket.io-client';
 
 const API_URL = 'http://localhost:3001';
 
@@ -36,15 +37,28 @@ async function runTest(workflow, inputPrompt) {
     }, 120000);
 
     let result = null;
-    let error = null;
+    let started = false;
+    const nodeErrors = [];
 
-    socket.on('connect', () => {
+    const startExecution = () => {
+      if (started) return;
+      started = true;
       console.log(`  Starting execution for: ${workflow.name}`);
       socket.emit('control', {
         type: 'start-execution',
         workflowId: workflow.id,
         input: inputPrompt,
       });
+    };
+
+    // The server emits `workflows` after wiring socket handlers.
+    socket.on('workflows', () => {
+      startExecution();
+    });
+
+    socket.on('connect', () => {
+      // Fallback for older server behavior.
+      setTimeout(startExecution, 200);
     });
 
     socket.on('event', (event) => {
@@ -54,18 +68,22 @@ async function runTest(workflow, inputPrompt) {
           result = event.result;
         }
       }
+      if (event.type === 'node-error') {
+        nodeErrors.push(`${event.nodeId}: ${event.error}`);
+      }
       if (event.type === 'execution-complete') {
         clearTimeout(timeout);
         socket.disconnect();
+        if (nodeErrors.length > 0) {
+          reject(new Error(`Node errors: ${nodeErrors.join('; ')}`));
+          return;
+        }
         resolve({ result, finalOutput: event.result });
       }
       if (event.type === 'execution-error') {
         clearTimeout(timeout);
         socket.disconnect();
         reject(new Error(event.error));
-      }
-      if (event.type === 'node-error') {
-        error = event.error;
       }
     });
 
@@ -78,6 +96,7 @@ async function runTest(workflow, inputPrompt) {
 
 async function main() {
   console.log('=== Workflow Test Runner ===\n');
+  await fs.mkdir('/tmp/agent-tests', { recursive: true });
 
   // Get all workflows
   const workflows = await getWorkflows();

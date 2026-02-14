@@ -29,7 +29,7 @@ nodes:
       model: haiku
       systemPrompt: "Extract numbers from input. Return only the number requested."
       tools: []
-      maxTurns: 1
+      maxTurns: 8
       conversationMode: fresh
       outputConfig:
         format: json
@@ -83,7 +83,7 @@ nodes:
       model: haiku
       systemPrompt: "Verify math calculations. Return whether the calculation is correct."
       tools: []
-      maxTurns: 1
+      maxTurns: 8
       conversationMode: fresh
       outputConfig:
         format: json

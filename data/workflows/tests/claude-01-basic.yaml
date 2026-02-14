@@ -28,7 +28,7 @@ nodes:
       model: haiku
       systemPrompt: "You are a calculator. Only output the numeric answer. No words, no explanation, just the number."
       tools: []
-      maxTurns: 1
+      maxTurns: 3
       conversationMode: fresh
       outputConfig:
         format: text
