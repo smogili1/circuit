@@ -21,6 +21,7 @@ module.exports = {
   },
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
+    '^@openai/codex-sdk$': '<rootDir>/tests/__mocks__/@openai/codex-sdk.ts',
   },
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {

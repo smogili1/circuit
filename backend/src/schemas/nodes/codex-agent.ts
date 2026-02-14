@@ -29,9 +29,10 @@ export const codexAgentSchema = defineSchema({
     model: {
       type: 'select',
       displayName: 'Model',
-      default: 'gpt-5.2-codex',
+      default: 'gpt-5.3-codex',
       options: [
-        { value: 'gpt-5.2-codex', label: 'GPT-5.2 Codex (Latest frontier)' },
+        { value: 'gpt-5.3-codex', label: 'GPT-5.3 Codex (Latest frontier)' },
+        { value: 'gpt-5.2-codex', label: 'GPT-5.2 Codex (Frontier)' },
         { value: 'gpt-5.2', label: 'GPT-5.2 (Frontier reasoning)' },
         { value: 'gpt-5.1-codex-max', label: 'GPT-5.1 Codex Max (Deep reasoning)' },
         { value: 'gpt-5.1-codex-mini', label: 'GPT-5.1 Codex Mini (Faster)' },

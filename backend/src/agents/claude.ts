@@ -27,21 +27,26 @@ interface ContentBlock {
   input?: Record<string, unknown>;
   thinking?: string;
   tool_use_id?: string;  // tool_result reference
-  content?: string;
+  content?: unknown;
 }
+
+type MessageContent = ContentBlock[] | string | Record<string, unknown>;
 
 interface ClaudeMessage {
   type: string;
   // For 'assistant' and 'user' types, content is nested inside a 'message' property
   message?: {
-    type: string;
     role?: string;
-    content?: ContentBlock[];
+    content?: MessageContent;
   };
   // For 'result' type, these fields are at top level
   subtype?: string;
   result?: string;
   structured_output?: unknown;
+  errors?: string[];
+  tool_use_result?: unknown;
+  parent_tool_use_id?: string | null;
+  session_id?: string;
 }
 
 function parseOutputSchema(schemaText: string): unknown {
@@ -50,6 +55,34 @@ function parseOutputSchema(schemaText: string): unknown {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     throw new Error(`Invalid JSON schema for structured output: ${message}`);
+  }
+}
+
+function normalizeContentBlocks(message: ClaudeMessage): ContentBlock[] {
+  const content = message.message?.content;
+  if (content === undefined || content === null) {
+    return [];
+  }
+  if (Array.isArray(content)) {
+    return content;
+  }
+  if (typeof content === 'string') {
+    return [{ type: 'text', text: content }];
+  }
+  return [{ type: 'text', text: formatToolResult(content) }];
+}
+
+function formatToolResult(content: unknown): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (content === null || content === undefined) {
+    return '';
+  }
+  try {
+    return JSON.stringify(content, null, 2);
+  } catch (error) {
+    return String(content);
   }
 }
 
@@ -64,7 +97,7 @@ export class ClaudeAgent extends BaseAgent {
   private sessionId?: string;
   private structuredOutput?: AgentStructuredOutput;
   // Store reference to the active stream so we can close it on interrupt
-  private activeStream?: AsyncIterable<unknown>;
+  private activeStream?: AsyncIterable<unknown> & { close?: () => void };
 
   constructor(config: ClaudeNodeConfig, mcpConfig?: MCPAgentConfig) {
     super();
@@ -91,6 +124,13 @@ export class ClaudeAgent extends BaseAgent {
         } catch (e) {
           // Ignore errors when closing the stream
           console.log('[ClaudeAgent] Error closing stream:', e);
+        }
+      }
+      if (typeof this.activeStream.close === 'function') {
+        try {
+          this.activeStream.close();
+        } catch (e) {
+          console.log('[ClaudeAgent] Error closing query:', e);
         }
       }
       this.activeStream = undefined;
@@ -130,6 +170,7 @@ export class ClaudeAgent extends BaseAgent {
       const options: Record<string, unknown> = {
         cwd: input.workingDirectory || context.workingDirectory,
         model: this.config.model,
+        abortController,
       };
 
       // Only add allowedTools if there are any
@@ -161,9 +202,9 @@ export class ClaudeAgent extends BaseAgent {
       // Add MCP servers if configured
       if (this.mcpConfig) {
         options.mcpServers = this.mcpConfig.mcpServers;
-        // Environment variables for MCP are passed through process.env
-        // The SDK will pick them up when spawning the MCP process
-        Object.assign(process.env, this.mcpConfig.env);
+        if (Object.keys(this.mcpConfig.env).length > 0) {
+          options.env = { ...process.env, ...this.mcpConfig.env };
+        }
         console.log('[ClaudeAgent] MCP servers configured:', Object.keys(this.mcpConfig.mcpServers));
       }
 
@@ -180,6 +221,7 @@ export class ClaudeAgent extends BaseAgent {
       console.log('[ClaudeAgent] Stream created, iterating...');
       for await (const message of stream) {
         console.log('[ClaudeAgent] Received message:', JSON.stringify(message).slice(0, 200));
+        const resultMessage = message as ClaudeMessage;
         // Check for abort
         if (abortController.signal.aborted) {
           yield { type: 'error', message: 'Execution interrupted' };
@@ -189,14 +231,13 @@ export class ClaudeAgent extends BaseAgent {
         // Capture session ID for future resumption (must be outside inner loop
         // because transformMessage returns empty array for 'system' messages)
         if (
-          (message as ClaudeMessage).type === 'system' &&
-          (message as { subtype?: string }).subtype === 'init'
+          resultMessage.type === 'system' &&
+          resultMessage.subtype === 'init'
         ) {
-          this.sessionId = (message as { session_id?: string }).session_id;
+          this.sessionId = resultMessage.session_id;
           console.log('[ClaudeAgent] Captured session ID:', this.sessionId);
         }
 
-        const resultMessage = message as ClaudeMessage;
         if (resultMessage.type === 'result' && resultMessage.structured_output !== undefined) {
           const content = JSON.stringify(resultMessage.structured_output);
           this.structuredOutput = {
@@ -231,55 +272,70 @@ export class ClaudeAgent extends BaseAgent {
   private transformMessage(message: ClaudeMessage): AgentEvent[] {
     const events: AgentEvent[] = [];
 
-    // For 'assistant' type, content is nested inside message.message.content
-    if (message.type === 'assistant' && message.message?.content) {
-      for (const block of message.message.content) {
+    if (message.type === 'assistant') {
+      for (const block of normalizeContentBlocks(message)) {
         if (block.type === 'text' && block.text) {
           events.push({ type: 'text-delta', content: block.text });
-        } else if (block.type === 'tool_use' && block.name && block.input) {
-          // Emit standard tool-use event
+        } else if (block.type === 'tool_use' && block.name) {
+          const input = block.input && typeof block.input === 'object'
+            ? block.input as Record<string, unknown>
+            : {};
           events.push({
             type: 'tool-use',
             id: block.id,
             name: block.name,
-            input: block.input,
+            input,
           });
 
-          // Also emit todo-list event for TodoWrite tool
-          if (block.name === 'TodoWrite' && block.input.todos) {
-            const todos = block.input.todos as Array<{
-              content: string;
-              status: string;
-              activeForm?: string;
-            }>;
-            events.push({
-              type: 'todo-list',
-              items: todos.map((t) => ({
-                text: t.activeForm || t.content,
-                completed: t.status === 'completed',
-              })),
-            });
+          if (block.name === 'TodoWrite') {
+            const todos = (input as { todos?: unknown }).todos;
+            if (Array.isArray(todos)) {
+              events.push({
+                type: 'todo-list',
+                items: todos.map((t) => {
+                  const todo = t as { content?: string; status?: string; activeForm?: string };
+                  return {
+                    text: todo.activeForm || todo.content || '',
+                    completed: todo.status === 'completed',
+                  };
+                }),
+              });
+            }
           }
-        } else if (block.type === 'thinking' && block.thinking) {
-          events.push({ type: 'thinking', content: block.thinking });
+        } else if (block.type === 'thinking') {
+          const thinking = block.thinking ?? block.text;
+          if (thinking) {
+            events.push({ type: 'thinking', content: thinking });
+          }
         }
       }
-    } else if (message.type === 'user' && message.message?.content) {
-      // Tool results come as 'user' type messages with content inside message.message
-      for (const block of message.message.content) {
+    } else if (message.type === 'user') {
+      const blocks = normalizeContentBlocks(message);
+      for (const block of blocks) {
         if (block.type === 'tool_result') {
+          const resultContent = block.content ?? block.text;
           events.push({
             type: 'tool-result',
             name: block.tool_use_id || 'tool',
-            result: typeof block.content === 'string' ? block.content : JSON.stringify(block.content),
+            result: formatToolResult(resultContent),
           });
         }
+      }
+      if (blocks.length === 0 && message.tool_use_result !== undefined) {
+        events.push({
+          type: 'tool-result',
+          name: message.parent_tool_use_id || 'tool',
+          result: formatToolResult(message.tool_use_result),
+        });
       }
     } else if (message.type === 'result') {
       if (message.subtype === 'success') {
         events.push({ type: 'complete', result: message.result || '' });
       } else {
-        events.push({ type: 'error', message: message.subtype || 'Unknown error' });
+        const errorMessage = message.errors && message.errors.length > 0
+          ? message.errors.join('\n')
+          : message.subtype || 'Unknown error';
+        events.push({ type: 'error', message: errorMessage });
       }
     }
 

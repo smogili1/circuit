@@ -31,6 +31,9 @@ export const claudeAgentSchema = defineSchema({
       displayName: 'Model',
       default: 'sonnet',
       options: [
+        { value: 'claude-opus-4-5', label: 'Opus 4.5 (Most capable)' },
+        { value: 'claude-sonnet-4-5', label: 'Sonnet 4.5 (Balanced)' },
+        { value: 'claude-haiku-4-5', label: 'Haiku 4.5 (Fastest)' },
         { value: 'opus', label: 'Opus (Most capable)' },
         { value: 'sonnet', label: 'Sonnet (Balanced)' },
         { value: 'haiku', label: 'Haiku (Fastest)' },

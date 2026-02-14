@@ -15,8 +15,8 @@
     "test:workflows": "node scripts/test-runner.js --workflow"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.1.55",
-    "@openai/codex-sdk": "^0.77.0",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.37",
+    "@openai/codex-sdk": "^0.79.0",
     "express": "^4.18.2",
     "js-yaml": "^3.14.2",
     "socket.io": "^4.7.5",
