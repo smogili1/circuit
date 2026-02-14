@@ -29,5 +29,7 @@ coverage/
 
 # User data (workflows, MCP configs, executions)
 data/executions
-data/workflows
+data/workflows/*
+!data/workflows/tests/
+!data/workflows/tests/**
 .playwright-mcp

@@ -48,7 +48,7 @@ nodes:
       model: haiku
       systemPrompt: "You repeat words exactly as requested. Only output the requested word."
       tools: []
-      maxTurns: 1
+      maxTurns: 3
       conversationMode: fresh
       outputConfig:
         format: json

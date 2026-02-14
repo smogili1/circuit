@@ -123,6 +123,7 @@ export interface MCPNodeServerConfig {
 // ============================================================================
 
 export interface SDKMCPServerConfig {
+  type?: 'stdio';
   command: string;
   args: string[];
   env?: Record<string, string>;

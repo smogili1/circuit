@@ -59,7 +59,7 @@ import { Workflow, CheckpointState, ExecutionEvent, ControlEvent } from '../work
 import { validateWorkflow } from '../orchestrator/validation';
 
 // Import executors to register them
-import '../orchestrator/executors';
+import { executorRegistry } from '../orchestrator/executors';
 
 function createMockWorkflow(nodeIds: string[]): Workflow {
   return {
@@ -103,8 +103,14 @@ function createConditionalWorkflow(): Workflow {
         data: {
           type: 'condition',
           name: 'Condition',
-          rules: [{ field: 'value', operator: 'equals', value: 'true', joiner: 'and' }],
-          inputSelection: { nodeId: 'input-1', nodeName: 'Input' },
+          conditions: [
+            {
+              inputReference: '{{Input.prompt}}',
+              operator: 'equals',
+              compareValue: 'true',
+              joiner: 'and',
+            },
+          ],
         } as any,
       },
       {
@@ -170,6 +176,7 @@ describe('WebSocket replay-execution', () => {
 
   beforeEach(() => {
     mockSocket = new MockSocket();
+    jest.restoreAllMocks();
     jest.clearAllMocks();
   });
 
@@ -370,10 +377,10 @@ describe('WebSocket replay-execution', () => {
     const mockExecutor = {
       getOutputHandle: jest.fn().mockReturnValue('true'),
     };
-    const executorRegistry = require('../orchestrator/executors/index').executorRegistry;
-    executorRegistry.get = jest.fn((type: string) => {
-      if (type === 'condition') return mockExecutor;
-      return null;
+    const originalGet = executorRegistry.get.bind(executorRegistry);
+    jest.spyOn(executorRegistry, 'get').mockImplementation((type: string) => {
+      if (type === 'condition') return mockExecutor as any;
+      return originalGet(type);
     });
 
     (getWorkflow as jest.Mock).mockReturnValue(workflow);

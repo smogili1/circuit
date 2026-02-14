@@ -10,12 +10,16 @@
  *   node scripts/test-runner.js --quick   # Skip expensive workflow tests (03, 04)
  */
 
-const { spawn } = require('child_process');
-const { io } = require('socket.io-client');
-const path = require('path');
+import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promises as fs } from 'node:fs';
+import { io } from 'socket.io-client';
 
 const SOCKET_URL = 'http://localhost:3001';
 const TIMEOUT_MS = 120000;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const WORKFLOW_IDS = [
   'claude-01-basic',
@@ -27,6 +31,7 @@ const WORKFLOW_IDS = [
   'codex-03-persist',
   'codex-04-transcript',
   'agents-05-chain',
+  'loops-06-nested-mock',
 ];
 
 const QUICK_WORKFLOW_IDS = [
@@ -35,6 +40,7 @@ const QUICK_WORKFLOW_IDS = [
   'codex-01-basic',
   'codex-02-json',
   'agents-05-chain',
+  'loops-06-nested-mock',
 ];
 
 // Parse arguments
@@ -106,6 +112,8 @@ function runWorkflowTest(workflowId) {
   return new Promise((resolve) => {
     const socket = io(SOCKET_URL, { transports: ['websocket'] });
     let resolved = false;
+    let started = false;
+    const nodeErrors = [];
 
     const timeout = setTimeout(() => {
       if (!resolved) {
@@ -115,12 +123,24 @@ function runWorkflowTest(workflowId) {
       }
     }, TIMEOUT_MS);
 
-    socket.on('connect', () => {
+    const startExecution = () => {
+      if (started) return;
+      started = true;
       socket.emit('control', {
         type: 'start-execution',
         workflowId,
         input: 'test input',
       });
+    };
+
+    // The server emits `workflows` after wiring socket handlers.
+    socket.on('workflows', () => {
+      startExecution();
+    });
+
+    socket.on('connect', () => {
+      // Fallback for older server behavior.
+      setTimeout(startExecution, 200);
     });
 
     socket.on('event', (event) => {
@@ -128,11 +148,20 @@ function runWorkflowTest(workflowId) {
         console.log(`    Node ${event.nodeId}: complete`);
       }
 
+      if (event.type === 'node-error') {
+        nodeErrors.push({ nodeId: event.nodeId, error: event.error });
+      }
+
       if (event.type === 'execution-complete') {
         clearTimeout(timeout);
         if (!resolved) {
           resolved = true;
           socket.disconnect();
+
+          if (nodeErrors.length > 0) {
+            resolve({ status: 'error', error: `Node errors: ${nodeErrors.map((e) => `${e.nodeId}: ${e.error}`).join('; ')}` });
+            return;
+          }
 
           // Check if workflow passed
           // For workflows with validators: check 'passed' field
@@ -166,6 +195,9 @@ async function runWorkflowTests() {
   console.log('\n' + '='.repeat(60));
   console.log('WORKFLOW INTEGRATION TESTS');
   console.log('='.repeat(60) + '\n');
+
+  // Ensure default test working directory exists.
+  await fs.mkdir('/tmp/agent-tests', { recursive: true });
 
   const workflowsToRun = quickMode ? QUICK_WORKFLOW_IDS : WORKFLOW_IDS;
 

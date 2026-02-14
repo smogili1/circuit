@@ -63,6 +63,7 @@ export class MCPConfigConverter {
   ): SDKMCPServersConfig {
     return {
       [name]: {
+        type: 'stdio',
         command: transport.command,
         args: transport.args,
         env: transport.env,
@@ -101,6 +102,7 @@ export class MCPConfigConverter {
 
     return {
       [name]: {
+        type: 'stdio',
         command: 'npx',
         args,
         env: Object.keys(env).length > 0 ? env : undefined,

@@ -32,7 +32,7 @@ export type {
 export type AgentOutputFormat = 'text' | 'json';
 
 export interface AgentOutputConfig {
-  format: AgentOutputFormat;
+  format?: AgentOutputFormat;
   filePath?: string;
   schema?: string;
 }

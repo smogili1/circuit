@@ -40,6 +40,10 @@ interface CodexThreadOptions {
   approvalPolicy?: 'untrusted' | 'on-request' | 'on-failure' | 'never';
   modelReasoningEffort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   workingDirectory?: string;
+  skipGitRepoCheck?: boolean;
+  networkAccessEnabled?: boolean;
+  webSearchEnabled?: boolean;
+  additionalDirectories?: string[];
   mcpServers?: SDKMCPServersConfig;
 }
 
@@ -320,7 +324,16 @@ export class CodexAgent extends BaseAgent {
     try {
       // Dynamically import the Codex SDK
       const { Codex } = await import('@openai/codex-sdk');
-      this.codex = new Codex() as unknown as CodexClient;
+      const codexEnv = this.mcpConfig?.env;
+      const codexOptions = codexEnv && Object.keys(codexEnv).length > 0
+        ? {
+            env: Object.fromEntries(
+              Object.entries({ ...process.env, ...codexEnv })
+                .filter(([_, v]) => v !== undefined)
+            ) as Record<string, string>
+          }
+        : undefined;
+      this.codex = new Codex(codexOptions) as unknown as CodexClient;
 
       const threadOptions: CodexThreadOptions = {
         model: this.config.model,

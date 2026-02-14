@@ -28,7 +28,7 @@ nodes:
       model: haiku
       systemPrompt: "Output the exact values requested. Do not deviate."
       tools: []
-      maxTurns: 1
+      maxTurns: 8
       conversationMode: fresh
       outputConfig:
         format: json
