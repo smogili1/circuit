@@ -16,6 +16,7 @@ const TEST_WORKFLOWS = [
   { name: 'Test: Codex Basic Features', expectedValidator: 'passed' },
   { name: 'Test: Codex JSON Output', expectedValidator: 'passed' },
   { name: 'Test: Cross-Agent Reference Chain', expectedValidator: 'passed' },
+  { name: 'Test: Nested Loop Mock Agent', expectedValidator: 'passed' },
   // Skip loop tests for now as they take longer
   // { name: 'Test: Claude Conversation Persist', expectedValidator: 'passed' },
   // { name: 'Test: Codex Conversation Persist', expectedValidator: 'passed' },

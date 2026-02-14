@@ -31,6 +31,7 @@ const WORKFLOW_IDS = [
   'codex-03-persist',
   'codex-04-transcript',
   'agents-05-chain',
+  'loops-06-nested-mock',
 ];
 
 const QUICK_WORKFLOW_IDS = [
@@ -39,6 +40,7 @@ const QUICK_WORKFLOW_IDS = [
   'codex-01-basic',
   'codex-02-json',
   'agents-05-chain',
+  'loops-06-nested-mock',
 ];
 
 // Parse arguments

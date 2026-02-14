@@ -16,6 +16,7 @@ Each test includes a **Validator** node that checks expected outputs.
 | `codex-03-persist.yaml` | Conversation persist mode, memory across loops | "Remember code: 99" then "What was it?" | code=99, runCount=2 |
 | `codex-04-transcript.yaml` | Transcript accumulation across runs | Say ONE/TWO/THREE | transcript contains all three |
 | `agents-05-chain.yaml` | Cross-agent reference interpolation | "Use number 7" | Claude→7, Codex→14, verify=true |
+| `loops-06-nested-mock.yaml` | Complex nested loops with mock agent (JavaScript) | "Run nested loop mock test" | outer=3, innerAttempts=2, passed=true |
 
 ## Coverage Matrix
 
@@ -35,6 +36,7 @@ Each test includes a **Validator** node that checks expected outputs.
 | runCount tracking | `03-persist`, `04-transcript` | `03-persist`, `04-transcript` |
 | Transcript accumulation | `04-transcript` | `04-transcript` |
 | Cross-agent references | `05-chain` | `05-chain` |
+| Nested loop behavior (mocked, deterministic) | `06-nested-mock` | `06-nested-mock` |
 
 ## Validation Structure
 

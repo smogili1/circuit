@@ -1,0 +1,196 @@
+id: loops-06-nested-mock
+name: "Test: Nested Loop Mock Agent"
+description: |
+  Tests: complex nested loops with deterministic mock-agent behavior (no real LLM calls)
+  Outer loop runs 3 iterations; each outer iteration runs an inner loop until a target attempt count.
+  Targets by outer iteration: [2, 3, 2]
+  Expected: final outerIteration=3, final innerAttempts=2, validator passed=true
+workingDirectory: /tmp/agent-tests
+nodes:
+  - id: input-1
+    type: input
+    position:
+      x: 80
+      y: 260
+    data:
+      type: input
+      name: Input
+      description: "Run nested loop mock test"
+
+  - id: outer-state
+    type: javascript
+    position:
+      x: 290
+      y: 260
+    data:
+      type: javascript
+      name: OuterState
+      code: |
+        const prevOuter = inputs.OuterSummary?.outerIteration || 0;
+        const outerIteration = prevOuter + 1;
+        const targetOuter = 3;
+        const targets = [2, 3, 2];
+        const innerTarget = targets[outerIteration - 1] || 2;
+
+        return {
+          outerIteration,
+          targetOuter,
+          innerTarget
+        };
+
+  - id: inner-state
+    type: javascript
+    position:
+      x: 520
+      y: 260
+    data:
+      type: javascript
+      name: InnerState
+      code: |
+        const prevAttempt = inputs.MockInnerAgent?.attempt || 0;
+        return {
+          outerIteration: inputs.OuterState.outerIteration,
+          innerTarget: inputs.OuterState.innerTarget,
+          attempt: prevAttempt + 1
+        };
+
+  - id: mock-inner-agent
+    type: javascript
+    position:
+      x: 740
+      y: 260
+    data:
+      type: javascript
+      name: MockInnerAgent
+      code: |
+        const state = inputs.InnerState;
+        const done = state.attempt >= state.innerTarget;
+
+        return {
+          outerIteration: state.outerIteration,
+          innerTarget: state.innerTarget,
+          attempt: state.attempt,
+          done,
+          result: `outer-${state.outerIteration}-attempt-${state.attempt}`
+        };
+
+  - id: inner-condition
+    type: condition
+    position:
+      x: 950
+      y: 260
+    data:
+      type: condition
+      name: InnerDone?
+      conditions:
+        - id: cond-inner
+          inputReference: "{{MockInnerAgent.done}}"
+          operator: equals
+          compareValue: "true"
+
+  - id: outer-summary
+    type: javascript
+    position:
+      x: 1160
+      y: 180
+    data:
+      type: javascript
+      name: OuterSummary
+      code: |
+        return {
+          outerIteration: inputs.MockInnerAgent.outerIteration,
+          innerAttempts: inputs.MockInnerAgent.attempt,
+          innerTarget: inputs.MockInnerAgent.innerTarget
+        };
+
+  - id: outer-condition
+    type: condition
+    position:
+      x: 1360
+      y: 180
+    data:
+      type: condition
+      name: OuterDone?
+      conditions:
+        - id: cond-outer
+          inputReference: "{{OuterSummary.outerIteration}}"
+          operator: greater_than_or_equals
+          compareValue: "3"
+
+  - id: validator
+    type: javascript
+    position:
+      x: 1570
+      y: 100
+    data:
+      type: javascript
+      name: Validator
+      code: |
+        const summary = inputs.OuterSummary;
+
+        const checks = {
+          finalOuterIs3: summary.outerIteration === 3,
+          finalInnerAttemptsIs2: summary.innerAttempts === 2,
+          finalInnerTargetIs2: summary.innerTarget === 2
+        };
+
+        const passed = Object.values(checks).every(Boolean);
+
+        return {
+          passed,
+          checks,
+          actual: summary,
+          expected: {
+            outerIteration: 3,
+            innerAttempts: 2,
+            innerTarget: 2
+          }
+        };
+
+  - id: output-1
+    type: output
+    position:
+      x: 1780
+      y: 100
+    data:
+      type: output
+      name: Output
+
+edges:
+  - id: e1
+    source: input-1
+    target: outer-state
+  - id: e2
+    source: outer-state
+    target: inner-state
+  - id: e3
+    source: inner-state
+    target: mock-inner-agent
+  - id: e4
+    source: mock-inner-agent
+    target: inner-condition
+  - id: e5
+    source: inner-condition
+    target: inner-state
+    sourceHandle: 'false'
+  - id: e6
+    source: inner-condition
+    target: outer-summary
+    sourceHandle: 'true'
+  - id: e7
+    source: outer-summary
+    target: outer-condition
+  - id: e8
+    source: outer-condition
+    target: outer-state
+    sourceHandle: 'false'
+  - id: e9
+    source: outer-condition
+    target: validator
+    sourceHandle: 'true'
+  - id: e10
+    source: validator
+    target: output-1
+
+createdAt: '2026-02-14T00:00:00.000Z'
+updatedAt: '2026-02-14T00:00:00.000Z'
